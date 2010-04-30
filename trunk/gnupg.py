@@ -100,12 +100,14 @@ def import_file(file):
     if number_processed <> 1:
         return 301, 'Keyblock contains more or less than a single key.'
     # Next, if we've not actually imported the key, return False.
-    imported_re = re.search(r'imported: (\d+)', result)
-    if not imported_re:
-        return 301, 'GnuPG reports no imported keys.'
-    imported = int(imported_re.group(1))
-    if imported <> 1:
-        return 301, 'Imported more or less than a single key.'
+    # TODO ----- UNREMARK THE FOLLOWING FOR LIVE -----
+    #imported_re = re.search(r'imported: (\d+)', result)
+    #if not imported_re:
+    #    return 301, 'GnuPG reports no imported keys.'
+    #imported = int(imported_re.group(1))
+    #if imported <> 1:
+    #    return 301, 'Imported more or less than a single key.'
+
     # If all has gone well, we should now be able to extract the keyid from
     # the import result and obtain its Fingerprint to return.
     keyid_re = re.search(r'key ([0-9A-F]{8}):', result)
@@ -148,17 +150,16 @@ def Encrypt(recipient, payload):
     proc.handles['stdout'].close()
     return ciphertext
 
-def SignCrypt(recipient, senderkey, passphrase, payload):
+def signcrypt(recipient, senderkey, passphrase, payload):
     recipients = []
     recipients.append(recipient)
-    recipients.append('228761E7')
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     gnupg.options.always_trust = 1
     #gnupg.options.no_version = 1
     gnupg.options.recipients = recipients
     gnupg.options.default_key = senderkey
-    gnupg.options.homedir = PUBRING
+    gnupg.options.homedir = KEYRING
     proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout', 'passphrase'])
     proc.handles['passphrase'].write(passphrase)
     proc.handles['passphrase'].close()

@@ -25,6 +25,9 @@ import os.path
 import datetime
 import sys
 import shelve
+import random
+import nntplib
+import StringIO
 from email.Utils import formatdate
 from optparse import OptionParser
 import gnupg
@@ -34,6 +37,9 @@ LOGLEVEL = 'debug'
 NYMDOMAIN = 'nymtest.mixmin.net'
 TMPFILE = '/home/nymtest/keyfile.tmp'
 DUPLICATE_DB_FILE = '/home/nymtest/dupcheck.db'
+RESERVED_NYMS = ['config', 'list']
+SIGNKEY = 'E15017369A622591FA95A5289DDE38992134085B'
+PASSPHRASE = '4mgCwmJrMs/c3RJadX2a'
 
 def init_logging():
     """Initialise logging.  This should be the first thing done so that all
@@ -56,23 +62,23 @@ def init_logging():
     level = loglevels[LOGLEVEL]
     logger.setLevel(level)
 
-def init_parser():
-    "Initialise the the Options Parser and read options."
-    parser = OptionParser()
-    parser.add_option("-r", "--recipient", action = "store", type = "string",
-                    dest = "recipient", default = 'foo',
-                    help = "Location of the log files.")
-    parser.add_option("--nohist", action = "store_true", dest = "nohist",
-                    default = False,
-                    help = "Don't store messages in a history file")
-    return parser.parse_args()
-
-def long_string(loglist):
-    """Concatenate strings and return a single long string."""
-    logmessage = ""
-    for line in loglist:
-        logmessage += line
-    return logmessage
+def success_message(fingerprint, addy):
+    mid = messageid(NYMDOMAIN)
+    message  = "Path: " + NYMDOMAIN + "!not-for-mail\n"
+    message += "From: Test Nymserver <nobody@mixmin.net>\n"
+    message += "Subject: " + fingerprint + "\n"
+    message += "Message-ID: " + mid + "\n"
+    message += "Newsgroups: alt.anonymous.messages\n"
+    message += "Date: " + formatdate() + "\n"
+    message += "\n"
+    payload  = "Congratulations!\n"
+    payload += "You have registered the pseudonym " + addy + ".\n"
+    payload += """
+From now on, messages sent to this address will be encrypted to your key and
+signed by the Nymserver before being delivered to the newsgroup
+alt.anonymous.messages.\n"""
+    enc_payload = gnupg.signcrypt(fingerprint, SIGNKEY, PASSPHRASE, payload)
+    nntpsend(mid, message + enc_payload)
 
 def middate():
     """Return a date in the format yyyymmdd.  This is useful for generating
@@ -136,6 +142,8 @@ def msgparse(message):
         error_report(501, 'Message contains no X-Original-To header.')
     if domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + domain)
+
+    # Start of the functionality for creating new Nyms.
     if nym == 'config':
         logger.info('Message sent to config address.')
         # Write any valid looking keyblock data to a tmp file.
@@ -156,12 +164,19 @@ def msgparse(message):
             logger.info('Deleting key ' + fingerprint)
             gnupg.delete_key(fingerprint)
             error_report(301, 'Wrong domain on ' + email_address + '.')
-        # Check if we already have a Nym with this address.
-        # TODO We can send a reply to the key before deleting it
-        if duplicate_nym_check(addy, fingerprint):
+        # Simple check to ensure the nym isn't on the reserved list.
+        if addy in RESERVED_NYMS:
             logger.info('Deleting key ' + fingerprint)
             gnupg.delete_key(fingerprint)
-            error_report(301, 'Nym ' + addy + ' already exists.')
+            error_report(301, addy + ' is a reserved Nym.')
+        # Check if we already have a Nym with this address.
+        # TODO We can send a reply to the key before deleting it
+        # TODO --- UNREMARK THE FOLLOWING FOR LIVE ---
+        #if duplicate_nym_check(addy, fingerprint):
+        #    logger.info('Deleting key ' + fingerprint)
+        #    gnupg.delete_key(fingerprint)
+        #    error_report(301, 'Nym ' + addy + ' already exists.')
+        success_message(fingerprint, email_address)
             
 
 def error_report(rc, desc):
@@ -184,6 +199,12 @@ def error_report(rc, desc):
     if rc >=500 and rc < 600:
         logger.error(desc + ' Aborting')
         sys.exit(rc)
+
+def nntpsend(mid, content):
+    payload = StringIO.StringIO(content)
+    s = nntplib.NNTP('news.mixmin.net')
+    s.ihave(mid, payload)
+
 
 def main():
     """Initialize the options parser and logging functions, then process
