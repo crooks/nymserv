@@ -24,6 +24,7 @@ import logging
 import os.path
 import datetime
 import sys
+import shelve
 from email.Utils import formatdate
 from optparse import OptionParser
 import gnupg
@@ -32,6 +33,7 @@ LOGPATH = '/home/nymtest/log'
 LOGLEVEL = 'debug'
 NYMDOMAIN = 'nymtest.mixmin.net'
 TMPFILE = '/home/nymtest/keyfile.tmp'
+DUPLICATE_DB_FILE = '/home/nymtest/dupcheck.db'
 
 def init_logging():
     """Initialise logging.  This should be the first thing done so that all
@@ -113,6 +115,15 @@ def split_email_domain(address):
     left, right = address.split('@', 1)
     return left, right
 
+def duplicate_nym_check(nym, fingerprint):
+    dupedb = shelve.open(DUPLICATE_DB_FILE)
+    if nym in dupedb:
+        return True
+    logger.debug('Recording new nym in duplicate DB: ' + nym)
+    dupedb[nym] = fingerprint
+    dupedb.close()
+    return False
+
 def msgparse(message):
     "Parse a received email."   
     # Use the email library to create the msg object.
@@ -127,17 +138,31 @@ def msgparse(message):
         error_report(501, 'Received message for invalid domain: ' + domain)
     if nym == 'config':
         logger.info('Message sent to config address.')
-        # Write any valid looking keyblock data to a tmp file
+        # Write any valid looking keyblock data to a tmp file.
         rc, result = gnupg.key_to_file(msg.get_payload(decode=1), TMPFILE)
         error_report(rc, result)
-        # Try to import the valid looking keyblock
+        # Try to import the valid looking keyblock.
         rc, fingerprint = gnupg.import_file(TMPFILE)
         error_report(rc, fingerprint)
-        # The result from import is a fingerprint.
         logger.info('Imported key ' + fingerprint)
+        # If we've managed to import a key, get the email address from it.
         rc, email_address = gnupg.get_email_from_keyid(fingerprint)
-        error_report(rc, email)
+        error_report(rc, email_address)
         logger.info('Extracted ' + email_address + ' from ' + fingerprint)
+        # Split out the address and domain components of the email address
+        addy, domain = split_email_domain(email_address)
+        # Simple check to ensure the key is in the right domain.
+        if domain <> NYMDOMAIN:
+            logger.info('Deleting key ' + fingerprint)
+            gnupg.delete_key(fingerprint)
+            error_report(301, 'Wrong domain on ' + email_address + '.')
+        # Check if we already have a Nym with this address.
+        # TODO We can send a reply to the key before deleting it
+        if duplicate_nym_check(addy, fingerprint):
+            logger.info('Deleting key ' + fingerprint)
+            gnupg.delete_key(fingerprint)
+            error_report(301, 'Nym ' + addy + ' already exists.')
+            
 
 def error_report(rc, desc):
     # 000   Success, no message

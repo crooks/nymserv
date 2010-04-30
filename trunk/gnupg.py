@@ -72,6 +72,14 @@ def fingerprint(email):
     else:
         return False
 
+def delete_key(keyid):
+    gnupg.options.meta_interactive = 0
+    gnupg.options.homedir = KEYRING
+    idlist = []
+    idlist.append(keyid)
+    proc = gnupg.run(['--delete-key'], args=idlist)
+    #proc.handles['stderr'].close()
+
 def import_file(file):
     """Import a PGP key and if successful, return its Fingerprint"""
     filelist = []
