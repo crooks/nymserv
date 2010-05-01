@@ -51,6 +51,22 @@ def get_email_from_keyid(keyid):
         return 001, is_email.group(0)
     return 301, 'Unable to extract email address from key'
 
+def emails_to_list():
+    email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
+    gnupg.options.armor = 1
+    gnupg.options.meta_interactive = 0
+    gnupg.options.homedir = KEYRING
+    proc = gnupg.run(['--list-keys'], create_fhs=['stdout'])
+    result = proc.handles['stdout'].read()
+    proc.handles['stdout'].close()
+    proc.wait()
+    lines = result.split('\n')
+    addresses = []
+    for line in lines:
+        is_email = re.search(email_re, line)
+        if is_email:
+            addresses.append(is_email.group(1))
+    return 001, addresses
 
 def fingerprint(email):
     """Return the fingerprint of a given email address. If we can't get the
@@ -101,12 +117,12 @@ def import_file(file):
         return 301, 'Keyblock contains more or less than a single key.'
     # Next, if we've not actually imported the key, return False.
     # TODO ----- UNREMARK THE FOLLOWING FOR LIVE -----
-    #imported_re = re.search(r'imported: (\d+)', result)
-    #if not imported_re:
-    #    return 301, 'GnuPG reports no imported keys.'
-    #imported = int(imported_re.group(1))
-    #if imported <> 1:
-    #    return 301, 'Imported more or less than a single key.'
+    imported_re = re.search(r'imported: (\d+)', result)
+    if not imported_re:
+        return 301, 'GnuPG reports no imported keys.'
+    imported = int(imported_re.group(1))
+    if imported <> 1:
+        return 301, 'Imported more or less than a single key.'
 
     # If all has gone well, we should now be able to extract the keyid from
     # the import result and obtain its Fingerprint to return.
