@@ -22,6 +22,7 @@ import re
 
 gnupg = GnuPGInterface.GnuPG()
 KEYRING = '/home/nymtest/keyring'
+email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
 def ReadKey(keyid):
     gnupg.options.armor = 1
@@ -36,7 +37,6 @@ def ReadKey(keyid):
     return key
 
 def get_email_from_keyid(keyid):
-    email_re = re.compile('[\w\-][\w\-\.]*@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     gnupg.options.homedir = KEYRING
@@ -52,7 +52,6 @@ def get_email_from_keyid(keyid):
     return 301, 'Unable to extract email address from key'
 
 def emails_to_list():
-    email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     gnupg.options.homedir = KEYRING
@@ -136,20 +135,27 @@ def import_file(file):
     # Return the fingerprint of the imported key
     return 001, finger
 
-def verify(recipient, payload):
-    recipients = []
-    recipients.append(recipient)
+def verify(message):
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     gnupg.options.always_trust = 1
-    gnupg.options.recipients = recipients
-    gnupg.options.homedir = PUBRING
-    proc = gnupg.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
-    proc.handles['stdin'].write(payload)
+    gnupg.options.homedir = KEYRING
+    proc = gnupg.run(['--verify'], create_fhs=['stdin', 'logger'])
+    proc.handles['stdin'].write(message)
     proc.handles['stdin'].close()
-    ciphertext = proc.handles['stdout'].read()
-    proc.handles['stdout'].close()
-    return ciphertext
+    result = proc.handles['logger'].read()
+    proc.handles['logger'].close()
+    lines = result.split('\n')
+    for line in lines:
+        address = email_re.search(line)
+        if not address:
+            continue
+        sigfor = address.group(0)
+        if 'Good signature' in line:
+            return 001, sigfor
+        if 'BAD signature' in line:
+            return 301, 'Bad signature for ' + sigfor + '.'
+    return 301, 'No signature found during verify operation.'
 
 def Encrypt(recipient, payload):
     recipients = []
@@ -167,6 +173,7 @@ def Encrypt(recipient, payload):
     return ciphertext
 
 def signcrypt(recipient, senderkey, passphrase, payload):
+    throw_keyids = ['bob@nymtest.mixmin.net']
     recipients = []
     recipients.append(recipient)
     gnupg.options.armor = 1
@@ -176,6 +183,8 @@ def signcrypt(recipient, senderkey, passphrase, payload):
     gnupg.options.recipients = recipients
     gnupg.options.default_key = senderkey
     gnupg.options.homedir = KEYRING
+    if recipient in throw_keyids:
+        gnupg.options.extra_args.append('--throw-keyid')
     proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout', 'passphrase'])
     proc.handles['passphrase'].write(passphrase)
     proc.handles['passphrase'].close()
@@ -265,3 +274,10 @@ def key_to_file(text, file):
             inblock = False
     f.close()
     return 101, 'Keybock successfully written to ' + file
+
+def main():
+    None
+
+# Call main function.
+if (__name__ == "__main__"):
+    main()

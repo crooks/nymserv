@@ -26,6 +26,7 @@ import datetime
 import sys
 import random
 import nntplib
+import smtplib
 import StringIO
 from email.Utils import formatdate
 from optparse import OptionParser
@@ -79,6 +80,27 @@ alt.anonymous.messages.\n"""
     enc_payload = gnupg.signcrypt(fingerprint, SIGNKEY, PASSPHRASE, payload)
     nntpsend(mid, message + enc_payload)
 
+def duplicate_message(fingerprint, addy):
+    mid = messageid(NYMDOMAIN)
+    message  = "Path: " + NYMDOMAIN + "!not-for-mail\n"
+    message += "From: Test Nymserver <nobody@mixmin.net>\n"
+    message += "Subject: Duplicate failure for " + addy + "\n"
+    message += "Message-ID: " + mid + "\n"
+    message += "Newsgroups: alt.anonymous.messages\n"
+    message += "Injection-Info: " + NYMDOMAIN + "\n"
+    message += "Date: " + formatdate() + "\n"
+    message += "\n"
+    payload  = "Error - Duplicate Nym Address " + addy + ".\n"
+    payload += """
+You attempted to register a Nym that already exists on the server.  You are
+receiving this response because the server can send a message encrypted to
+the unique key you created but external users can only send to an email
+address.  Hence, the email address must be unique.\n"""
+    payload += "\nThe key " + fingerprint + " "
+    payload += "will now be deleted from the server.\n"
+    enc_payload = gnupg.signcrypt(fingerprint, SIGNKEY, PASSPHRASE, payload)
+    nntpsend(mid, message + enc_payload)
+
 def middate():
     """Return a date in the format yyyymmdd.  This is useful for generating
     a component of Message-ID."""
@@ -123,19 +145,21 @@ def split_email_domain(address):
 def msgparse(message):
     "Parse a received email."
     # nymlist willl contain a list of all the nyms currently on the server
-    nymlist = gnupg.emails_to_list()
+    rc, nymlist = gnupg.emails_to_list()
     # Use the email library to create the msg object.
     msg = email.message_from_string(message)
     # Who was this message sent to?  It needs to be configure@nymdomain
     if 'X-Original-To' in msg:
         xot_email = msg['X-Original-To']
         xot_addy, xot_domain = split_email_domain(xot_email)
-        logger.debug('Message recipient is: ' + xot_addy)
+        logger.debug('Processing received email message for: ' + xot_email)
     else:
         error_report(501, 'Message contains no X-Original-To header.')
     if xot_domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
+    if not body:
+        error_report(301, 'Empty message payload.')
     # Start of the functionality for creating new Nyms.
     if xot_addy == 'config':
         logger.info('Message sent to config address.')
@@ -163,26 +187,52 @@ def msgparse(message):
             gnupg.delete_key(fingerprint)
             error_report(301, key_addy + ' is a reserved Nym.')
         # Check if we already have a Nym with this address.
-        # TODO We can send a reply to the key before deleting it
         if key_addy in nymlist:
+            duplicate_message(fingerprint, key_email)
             logger.info('Deleting key ' + fingerprint)
             gnupg.delete_key(fingerprint)
             error_report(301, 'Nym ' + key_addy + ' already exists.')
         logger.info('Nym ' + key_addy + ' successfully created.')
         success_message(fingerprint, key_email)
 
+    # We also send messages for Nymholders after verifying their signature.
+    elif xot_addy == 'send':
+        logger.debug('Message received for forwarding.')
+        if not 'Recipient' in msg:
+            error_report(301, 'No Recipient header on Send message.')
+        rc, result = gnupg.verify(body)
+        error_report(rc, result)
+        logger.info('Valid signature on Send message from ' + result + '.')
+        email_message  = 'From: ' + result + '\n'
+        email_message += 'To: ' + msg['Recipient'] + '\n'
+        wanted_headers = ['Subject', 'Message-ID', 'Date', 'Newsgroups']
+        for header in wanted_headers:
+            if header in msg:
+                email_message += header +  ': ' + msg[header] + '\n'
+        email_message += '\n' + body
+        logger.debug('Attempting to email message to ' + msg['recipient'])
+        server = smtplib.SMTP('localhost')
+        #server.set_debuglevel(1)
+        try:
+            server.sendmail(result, msg['Recipient'], email_message)
+        except:
+            message = 'Sending email failed with: %s.' % sys.exc_info()[1]
+            error_report(401, message)
+        server.quit()        
+
     # If the message isn't to config, it's a message to a Nym
     else:
         if not xot_addy in nymlist:
             error_report(301, 'No public key for ' + xot_email)
-        logger.debug("Processing message to " + recipient)
+        logger.debug("Processing message to " + xot_email)
         payload = ''
         wanted_headers = ['From', 'Subject', 'Message-ID', 'Reply-To']
         for header in wanted_headers:
             if header in msg:
-                payload += header + ': ' + msg[header] + "\n"
+                payload += header + ': ' + msg[header] + '\n'
         payload += '\n' + body
         # Attempt to encrypt and sign the payload
+        logger.debug('Encrypting message to ' + xot_email)
         enc_payload = gnupg.signcrypt(xot_email, SIGNKEY, PASSPHRASE, payload)
         mid = messageid(NYMDOMAIN)
         message  = "Path: " + NYMDOMAIN + "!not-for-mail\n"
@@ -190,7 +240,7 @@ def msgparse(message):
         message += "Subject: " + xot_email + "\n"
         message += "Message-ID: " + mid + "\n"
         message += "Newsgroups: alt.anonymous.messages\n"
-        message += "Injection-Info: " + NYMDOMAIN
+        message += "Injection-Info: " + NYMDOMAIN + "\n"
         message += "Date: " + formatdate() + "\n"
         message += "\n"
         logger.debug('Attempting to deliver message for ' + xot_email)
@@ -222,7 +272,11 @@ def nntpsend(mid, content):
     hosts = ['news.mixmin.net', 'news.glorb.com']
     for host in hosts:
         logger.debug('Posting to ' + host)
-        s = nntplib.NNTP(host)
+        try:
+            s = nntplib.NNTP(host)
+        except:
+            logger.warn('Untrapped error during connect to ' + host)
+            continue
         try:
             s.ihave(mid, payload)
             logger.info("%s successful IHAVE to %s." % (mid, host))
