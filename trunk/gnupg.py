@@ -21,10 +21,10 @@ import GnuPGInterface
 import re
 
 gnupg = GnuPGInterface.GnuPG()
-KEYRING = '/home/nymtest/keyring'
+KEYRING = '/crypt//home/nymserv/keyring'
 email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
-def ReadKey(keyid):
+def export(keyid):
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     gnupg.options.homedir = KEYRING
@@ -157,6 +157,50 @@ def verify(message):
             return 301, 'Bad signature for ' + sigfor + '.'
     return 301, 'No signature found during verify operation.'
 
+def verify_decrypt(message, passphrase):
+    """This function is unusual in that it returns 3 variables:
+    Return Code, Result (Email if verified), Decrypted Payload."""
+    gnupg.options.armor = 1
+    gnupg.options.meta_interactive = 0
+    gnupg.options.always_trust = 1
+    gnupg.options.homedir = KEYRING
+    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger',
+                                                'passphrase'])
+    proc.handles['stdin'].write(message)
+    proc.handles['passphrase'].write(passphrase)
+    proc.handles['stdin'].close()
+    proc.handles['passphrase'].close()
+    result = proc.handles['logger'].read()
+    content = proc.handles['stdout'].read()
+    proc.handles['logger'].close()
+    proc.handles['stdout'].close()
+    proc.wait()
+    lines = result.split('\n')
+    for line in lines:
+        address = email_re.search(line)
+        if not address:
+            continue
+        sigfor = address.group(0)
+        if 'Good signature' in line:
+            return 001, sigfor, content
+        if 'BAD signature' in line:
+            return 301, 'Bad signature for ' + sigfor + '.', None
+    return 301, 'No signature found during verify operation.', None
+
+def symmetric(passphrase, payload):
+    gnupg.options.armor = 1
+    gnupg.options.meta_interactive = 0
+    proc = gnupg.run(['--symmetric'], create_fhs=['stdin', 'stdout',
+                                                  'passphrase'])
+    proc.handles['passphrase'].write(passphrase)
+    proc.handles['passphrase'].close()
+    proc.handles['stdin'].write(payload)
+    proc.handles['stdin'].close()
+    ciphertext = proc.handles['stdout'].read()
+    proc.handles['stdout'].close()
+    proc.wait()
+    return ciphertext
+
 def Encrypt(recipient, payload):
     recipients = []
     recipients.append(recipient)
@@ -172,8 +216,7 @@ def Encrypt(recipient, payload):
     proc.handles['stdout'].close()
     return ciphertext
 
-def signcrypt(recipient, senderkey, passphrase, payload):
-    throw_keyids = ['bob@nymtest.mixmin.net']
+def signcrypt(recipient, senderkey, passphrase, payload, throw_key = False):
     recipients = []
     recipients.append(recipient)
     gnupg.options.armor = 1
@@ -183,15 +226,17 @@ def signcrypt(recipient, senderkey, passphrase, payload):
     gnupg.options.recipients = recipients
     gnupg.options.default_key = senderkey
     gnupg.options.homedir = KEYRING
-    if recipient in throw_keyids:
+    if throw_key:
         gnupg.options.extra_args.append('--throw-keyid')
-    proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout', 'passphrase'])
+    proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout',
+                                                          'passphrase'])
     proc.handles['passphrase'].write(passphrase)
     proc.handles['passphrase'].close()
     proc.handles['stdin'].write(payload)
     proc.handles['stdin'].close()
     ciphertext = proc.handles['stdout'].read()
     proc.handles['stdout'].close()
+    proc.wait()
     return ciphertext
 
 def GenKey(name, addy, passphrase):
@@ -256,24 +301,6 @@ def CheckKey(email):
     else:
         keyid = fp.replace(' ','')
     return keyid
-
-def key_to_file(text, file):
-    lines = text.split('\n')
-    if not '-----BEGIN PGP PUBLIC KEY BLOCK-----' in lines:
-        return 301, 'No Being Public Key Block cutmark.'
-    if not '-----END PGP PUBLIC KEY BLOCK-----' in lines:
-        return 302, 'No End Public Key Block cutmark.'
-    f = open(file, 'w')
-    inblock = False
-    for line in lines:
-        if line == '-----BEGIN PGP PUBLIC KEY BLOCK-----':
-            inblock = True
-        if inblock:
-            f.write(line + '\n')
-        if line == '-----END PGP PUBLIC KEY BLOCK-----':
-            inblock = False
-    f.close()
-    return 101, 'Keybock successfully written to ' + file
 
 def main():
     None
