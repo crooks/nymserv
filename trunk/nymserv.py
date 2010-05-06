@@ -121,8 +121,12 @@ Symmetric: passphrase
 Likewise, an hSub Subject can be defined using:
 Hsub: passphrase
 
-Any combination of commands can be sent in the same message. In response, you
-will receive confirmation of your Nym modification.\n"""
+Any combination of commands can be sent in the same message.  You can also
+unset an option by setting it to 'none'.  E.g.
+Symmetric: none
+
+Modifications to your Nym will receive a confirmation message in
+alt.anonymous.messages, formatted in accordance with your request.\n"""
     return payload
 
 def modify_success_message(addy, conf):
@@ -159,6 +163,8 @@ but the Nym will not be functional.\n"""
     return payload
 
 def post_message(payload, conf):
+    """Take a payload and add headers to it for News posting.  The dictionary
+    'conf' contains specific formatting instructions."""
     mid, headers  = news_headers(conf['hsub'])
     recipient = conf['fingerprint']
     # If Symmetric encryption is specified, we don't need to throw the
