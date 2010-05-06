@@ -2,11 +2,11 @@
 #
 # vim: tabstop=4 expandtab shiftwidth=4 noautoindent
 #
-# m2n.py -- This is a simple mail2news script that accepts messages formatted
-# with a Newsgroups header or delivered to a recipient in the format
-# mail2news-yyyymmdd-news.group@domain.com
+# nymserv.py - A Basic Nymserver for delivering messages to a shared mailbox
+# such as alt.anonymous.messages.
 #
-# Copyright (C) 2008 Steve Crook <steve@mixmin.net>
+# Copyright (C) 2010 Steve Crook <steve@mixmin.net>
+# $Id$
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the

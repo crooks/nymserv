@@ -2,7 +2,7 @@
 #
 # vim: tabstop=4 expandtab shiftwidth=4 autoindent
 #
-# nymgrind.py -- Skeleton for producing Type-I nyms
+# gnupg.py - GnuPG functionality through GnuPGInterface.
 # $Id$
 #
 # Copyright (C) 2005 Steve Crook <steve@mixmin.org>
