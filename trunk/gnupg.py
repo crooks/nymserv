@@ -5,7 +5,7 @@
 # gnupg.py - GnuPG functionality through GnuPGInterface.
 # $Id$
 #
-# Copyright (C) 2005 Steve Crook <steve@mixmin.org>
+# Copyright (C) 2010 Steve Crook <steve@mixmin.net>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
@@ -78,7 +78,7 @@ def fingerprint(email):
     key = proc.handles['stdout'].read()
     proc.handles['stdout'].close()
     finger_re = re.search( \
-            'Key fingerprint = ([0-9A-F]{4}(\s+[0-9A-F]{4})+)', key)
+            'Key fingerprint = ([0-9A-F\s]+)', key)
     if finger_re:
         finger = finger_re.group(1)
         finger_list = finger.split()
