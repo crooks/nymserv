@@ -226,6 +226,7 @@ def signcrypt(recipient, senderkey, passphrase, payload, throw_key = False):
     gnupg.options.recipients = recipients
     gnupg.options.default_key = senderkey
     gnupg.options.homedir = KEYRING
+    gnupg.options.extra_args.append('--no-version')
     if throw_key:
         gnupg.options.extra_args.append('--throw-keyid')
     proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout',
