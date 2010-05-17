@@ -107,9 +107,9 @@ def main():
     message = """Below is the PGP Public Key for the "Not My Name" Nymserver.
 
 To use it, create a PGP key for your_desired_nym@is-not-my.name and submit it
-(in ASCII plain text, unsigned and unencrypted) to the above address.  You will
-need the server's key in order to verify the signatures on messages for you and
-to encrypt configuration messages to the Nymserver.
+(in ASCII plain text, unsigned and unencrypted) to config@is-not-my.name.  You
+will need the server's key in order to verify the signatures on messages for
+you and to encrypt configuration messages to the Nymserver.
 
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v1.4.9 (GNU/Linux)

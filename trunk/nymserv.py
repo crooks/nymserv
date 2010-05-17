@@ -292,8 +292,7 @@ def midrand(numchars):
     return randstring
 
 def messageid(rightpart):
-    """Compile a valid Message-ID.  This should never be called outside
-    of testing as a message cannot reach the gateway without an ID."""
+    """Compile a valid Message-ID."""
     leftpart = middate() + "." + midrand(12)
     mid = '<' + leftpart + '@' + rightpart + '>'
     return mid
