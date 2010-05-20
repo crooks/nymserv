@@ -92,15 +92,17 @@ def news_headers(hsubval = False):
     message += "Date: " + formatdate() + "\n"
     return mid, message
 
-def send_success_message(recipient):
+def send_success_message(msg_dict):
     """Post confirmation that an email was sent through the Nymserver to a
     non-anonymous recipient."""
     payload  = "Email Delivery Notification\n"
     payload += underline('-', payload)
-    payload += "Your email to " + recipient + " was sent.\n"
-    payload += """
-Your request to send an email through the Nymserver was actioned successfully.
-\n"""
+    payload += "Your email to " + msg_dict['To'] + " was sent.\n\n"
+    payload += "Details are:\n"
+    payload += "Subject: " + msg_dict['Subject'] + "\n"
+    payload += "From: " + msg_dict['From'] + "\n"
+    payload += "Date: " + msg_dict['Date'] + "\n"
+    payload += "Message-ID: " + msg_dict['Message-ID'] + "\n"
     return payload
 
 def create_success_message(addy):
@@ -161,6 +163,27 @@ because the server can send a message encrypted to the unique key you created
 but the Nym will not be functional.\n"""
     payload += "\nThe key " + fingerprint + " "
     payload += "will now be deleted from the server.\n"
+    return payload
+
+def send_no_recipient_message(email, subject):
+    payload = 'Error: Message not sent\n'
+    payload += underline('-', payload)
+    payload += 'Your request to send a message from your nym ' + email
+    payload += ' failed.\n'
+    payload += 'The Subject of the message was: ' + subject + '\n'
+    payload += '''
+The cause of the failure is that you didn't specify any recipients in your
+encrypted message.  (Whilst a Cc header will be honoured, a valid To header is
+compulsory.)
+
+The encrypted payload of your message must be formatted like a standard email
+message.  It should begin with the headers, each containing a Colon-Space
+between name and content.  The headers should be followed by a blank line and
+then the content.
+
+Please note, the signature on your message was successfully verified in order
+to prove you were the genuine originator of the message.  A failed signature
+would prevent this response to your Nym.\n'''
     return payload
 
 def post_message(payload, conf):
@@ -428,29 +451,59 @@ def msgparse(message):
     # We also send messages for Nymholders after verifying their signature.
     elif xot_addy == 'send':
         logger.debug('Message received for forwarding.')
-        if not 'Recipient' in msg:
-            error_report(301, 'No Recipient header on Send message.')
-        rc, nym_email = gnupg.verify(body)
+        rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
         error_report(rc, nym_email)
-        logger.info('Valid signature on Send message from ' + nym_email + '.')
+        logger.info('Verified sender is ' + nym_email)
+        send_msg = email.message_from_string(content)
+        # This section checks that the From header matches the verified
+        # signature.  It's a matter for debate but currently it's enforced
+        # as the From is set to the signature.
+        if 'From' in send_msg:
+            if send_msg['From'] == nym_email:
+                logger.debug('From header in payload matches signature.')
+            else:
+                log_message  = 'From header says ' + send_msg['From']
+                log_message += ' but signature is for ' + nym_email
+                log_message += '. Changing From to match signature.'
+                logger.info(log_message)
+                send_msg['From'] = nym_email
+        else:
+            logger.info('No From header in payload, setting to signature.')
+            send_msg['From'] = nym_email
         nym_addy, nym_domain = split_email_domain(nym_email)
-        email_message  = 'From: ' + nym_email + '\n'
-        email_message += 'To: ' + msg['Recipient'] + '\n'
-        wanted_headers = ['Subject', 'Message-ID', 'Date', 'Newsgroups']
-        for header in wanted_headers:
-            if header in msg:
-                email_message += header +  ': ' + msg[header] + '\n'
-        email_message += '\n' + body
-        logger.debug('Attempting to email message to ' + msg['recipient'])
+        conf = user_read(nym_addy)
+        if not 'Subject' in send_msg:
+            logger.debug('No Subject on message, creating a dummy.')
+            send_msg['Subject'] = 'No Subject'
+        # Check we actually have a recipient for the message
+        if 'To' not in send_msg:
+            message = send_no_recipient_message(nym_email, send_msg['Subject'])
+            post_message(message, conf)
+            error_report(301, 'No recipient specified in To header.')
+        # If we receive a Message-ID, use it, otherwise generate one.
+        if 'Message-ID' in send_msg:
+            logger.debug('Using provided Message-ID')
+        else:
+            logger.debug('Generating Message-ID for outbound message')
+            send_msg['Message-ID'] = messageid(NYMDOMAIN)
+        # If we receive a Date, use it, otherwise generate one.
+        if 'Date' in send_msg:
+            logger.debug('Using provided Date of ' + send_msg['Date'])
+        else:
+            send_msg['Date'] = formatdate()
+            logger.debug('Generated Date header of ' + send_msg['Date'])
+        logger.debug('Attempting to email message to ' + send_msg['To'])
+        if 'Cc' in send_msg:
+            logger.debug("Cc'd to " + send_msg['Cc'])
         server = smtplib.SMTP('localhost')
         #server.set_debuglevel(1)
         try:
-            server.sendmail(nym_email, msg['Recipient'], email_message)
+            server.sendmail(nym_email, send_msg['To'], send_msg.as_string())
         except:
             message = 'Sending email failed with: %s.' % sys.exc_info()[1]
             error_report(401, message)
         server.quit()
-        message = send_success_message(msg['Recipient'])
+        message = send_success_message(send_msg)
         conf = user_read(nym_addy)
         post_message(message, conf)
 
