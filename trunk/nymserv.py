@@ -514,7 +514,7 @@ def msgparse(message):
         logger.debug("Processing plain-text message to " + xot_addy)
         message = ''
         wanted_headers = ['From', 'Subject', 'Message-ID', 'Reply-To',
-                          'References', 'In-Reply-To']
+                          'References', 'In-Reply-To', 'Date']
         for header in wanted_headers:
             if header in msg:
                 message += header + ': ' + msg[header] + '\n'
