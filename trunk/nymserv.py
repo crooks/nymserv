@@ -502,6 +502,14 @@ def msgparse(message):
         except:
             message = 'Sending email failed with: %s.' % sys.exc_info()[1]
             error_report(401, message)
+        # We need to process Cc's as well as To's.
+        if 'Cc' in send_msg:
+            try:
+                server.sendmail(nym_email, send_msg['Cc'],
+                                send_msg.as_string())
+            except:
+                message = 'Sending email failed with: %s.' % sys.exc_info()[1]
+                error_report(401, message)
         server.quit()
         message = send_success_message(send_msg)
         conf = user_read(nym_addy)
