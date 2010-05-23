@@ -139,7 +139,7 @@ def modify_success_message(addy, conf):
     payload += "You have successfully modified you pseudonym " + addy + ".\n\n"
     payload += "After modification, the options configured on your nym are:-\n"
     for key in conf:
-        payload += key + ': ' + conf[key] + '\n'
+        payload += key + ': ' + str(conf[key]) + '\n'
     return payload
 
 def duplicate_message(fingerprint, addy):
