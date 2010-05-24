@@ -81,8 +81,10 @@ def news_headers(hsubval = False):
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
     if hsubval:
+        logger.debug("Generating a real hSub header.")
         message += "Subject: " + hsub.hash(hsubval) + '\n'
     else:
+        logger.debug("No hSub defined, generating a fake.")
         # We use datestring as a seed for our fake hsub.
         rndhash = midrand(16) + middate()
         message += "Subject: " + hsub.hash(rndhash) + "\n"
@@ -92,17 +94,19 @@ def news_headers(hsubval = False):
     message += "Date: " + formatdate() + "\n"
     return mid, message
 
-def send_success_message(msg_dict):
+def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
     non-anonymous recipient."""
-    payload  = "Email Delivery Notification\n"
-    payload += underline('-', payload)
-    payload += "Your email to " + msg_dict['To'] + " was sent.\n\n"
-    payload += "Details are:\n"
-    payload += "Subject: " + msg_dict['Subject'] + "\n"
-    payload += "From: " + msg_dict['From'] + "\n"
-    payload += "Date: " + msg_dict['Date'] + "\n"
-    payload += "Message-ID: " + msg_dict['Message-ID'] + "\n"
+    payload  = "From: send@" + NYMDOMAIN + "\n"
+    payload += "To: " + msg['From'] + "\n"
+    payload += "Subject: Delivery Notification for " + msg['To'] + "\n"
+    payload += "Date: " + msg['Date'] + "\n"
+    payload += "\n"
+    payload += "Your email to " + msg['To'] + " was sent.\n"
+    if 'Cc' in msg:
+        payload += "It was copied to " + msg['Cc'] + "\n" 
+    payload += "The Subject was: " + msg['Subject'] + "\n"
+    payload += "The Message-ID was: " + msg['Message-ID'] + "\n"
     return payload
 
 def create_success_message(addy):
