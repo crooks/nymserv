@@ -265,7 +265,9 @@ def user_update(confdict, text):
     """Update a user's config paramters from a text body. The current list of
     options is read from confdict and updated with those in the text.  To use
     this function, confdict must already be populated using user_read."""
-    locked_keys = ['fingerprint']
+    # version is locked because people send PGP keys in Modify requests and
+    # the Version header in the data is treated as a config option.
+    locked_keys = ['fingerprint', 'version']
     confopt_re = re.compile('(\w+?):\s(.+)')
     lines = text.split('\n')
     for line in lines:
@@ -434,8 +436,9 @@ def msgparse(message):
         # If we've received a PGP Message to our config address, it can only
         # be a signed and encrypted request to modify a Nym config.
         elif kom == 'message':
-            logmessage = 'This email is a PGP Message. Assuming its a modify request.'
-            logger.debug(logmessage)
+            logmessage  = 'This email is a PGP Message. '
+            logmessage += 'Assuming its a modify request.'
+            logger.info(logmessage)
             rc, mod_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
             error_report(rc, mod_email)
             logger.debug('Modify Nym request is for ' + mod_email + '.')

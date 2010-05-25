@@ -174,7 +174,10 @@ def verify_decrypt(message, passphrase):
     content = proc.handles['stdout'].read()
     proc.handles['logger'].close()
     proc.handles['stdout'].close()
-    proc.wait()
+    try:
+        proc.wait()
+    except IOError:
+        return 301, 'Invalid PGP Message.', None
     lines = result.split('\n')
     for line in lines:
         address = email_re.search(line)
