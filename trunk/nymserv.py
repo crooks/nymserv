@@ -85,9 +85,7 @@ def news_headers(hsubval = False):
         message += "Subject: " + hsub.hash(hsubval) + '\n'
     else:
         logger.debug("No hSub defined, generating a fake.")
-        # We use datestring as a seed for our fake hsub.
-        rndhash = midrand(16) + middate()
-        message += "Subject: " + hsub.hash(rndhash) + "\n"
+        message += "Subject: " + hsub.cryptorandom(24).encode('hex') + "\n"
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
     message += "Injection-Info: mail2news.mixmin.net\n"
