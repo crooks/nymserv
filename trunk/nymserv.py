@@ -524,14 +524,12 @@ def msgparse(message):
     else:
         if not xot_addy in nymlist:
             error_report(301, 'No public key for ' + xot_email + '.')
-        logger.debug("Processing plain-text message to " + xot_addy)
-        message = ''
-        wanted_headers = ['From', 'Subject', 'Message-ID', 'Reply-To',
-                          'References', 'In-Reply-To', 'Date']
-        for header in wanted_headers:
-            if header in msg:
-                message += header + ': ' + msg[header] + '\n'
-        message += '\n' + body
+        logmessage  = "Processing inbound message from " + msg['From']
+        logmessage += " to " + xot_addy + "."
+        logger.debug(logmessage)
+        if msg.is_multipart():
+            logger.debug("Message is a Multipart MIME.")
+        message = msg.as_string()
         # Attempt to encrypt and sign the payload
         conf = user_read(xot_addy)
         post_message(message, conf)
