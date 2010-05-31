@@ -368,12 +368,12 @@ def msgparse(message):
     if xot_domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
-    if not body:
-        error_report(301, 'Empty message payload.')
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
     if xot_addy == 'config':
+        if msg.is_multipart():
+            error_report(301, 'Multipart message sent to config address.')
         # Next we want to check if we're receiving a message or a Public Key.
         rc, kom = key_or_message(body)
         # If it's a key then this can only be a new Nym request.
@@ -455,6 +455,8 @@ def msgparse(message):
 
     # We also send messages for Nymholders after verifying their signature.
     elif xot_addy == 'send':
+        if msg.is_multipart():
+            error_report(301, 'Multipart message sent to send address.')
         logger.debug('Message received for forwarding.')
         rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
         error_report(rc, nym_email)
@@ -557,7 +559,8 @@ def error_report(rc, desc):
 
 def nntpsend(mid, content):
     payload = StringIO.StringIO(content)
-    hosts = ['news.mixmin.net', 'news.glorb.com', 'newsin.alt.net']
+    hosts = ['news.mixmin.net', 'news.glorb.com', 'newsin.alt.net',
+             'mixmin-in.news.arglkargh.de']
     socket.setdefaulttimeout(10)
     for host in hosts:
         logger.debug('Posting to ' + host)
