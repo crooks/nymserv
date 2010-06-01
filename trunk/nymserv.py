@@ -188,6 +188,24 @@ to prove you were the genuine originator of the message.  A failed signature
 would prevent this response to your Nym.\n'''
     return payload
 
+def email_message(sender_email, recipient_string, message):
+    """Take a sender email address and a From header-like string of
+    recipients.  Split out each recipient and try to email them."""
+    recipients = recipient_string.split(',')
+    server = smtplib.SMTP('localhost')
+    for recipient in recipients:
+        name, addy = email.utils.parseaddr(recipient)
+        logmessage  = 'Sending email from ' + sender_email
+        logmessage += ' to ' + addy + '.'
+        logger.info(logmessage)
+        try:
+            server.sendmail(sender_email, addy, message.as_string())
+        except:
+            logmessage  = 'Sending email to ' + addy
+            logmessage += ' failed with error %s.' % sys.exc_info()[1]
+            error_report(201, logmessage)
+    server.quit()
+
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
     'conf' contains specific formatting instructions."""
@@ -507,25 +525,12 @@ def msgparse(message):
         else:
             send_msg['Date'] = email.utils.formatdate()
             logger.debug('Generated Date header of ' + send_msg['Date'])
-        logger.debug('Attempting to email message to ' + send_msg['To'])
+        recipients = send_msg['To']
         if 'Cc' in send_msg:
             logger.debug("Cc'd to " + send_msg['Cc'])
-        server = smtplib.SMTP('localhost')
-        #server.set_debuglevel(1)
-        try:
-            server.sendmail(nym_email, send_msg['To'], send_msg.as_string())
-        except:
-            message = 'Sending email failed with: %s.' % sys.exc_info()[1]
-            error_report(401, message)
-        # We need to process Cc's as well as To's.
-        if 'Cc' in send_msg:
-            try:
-                server.sendmail(nym_email, send_msg['Cc'],
-                                send_msg.as_string())
-            except:
-                message = 'Sending email failed with: %s.' % sys.exc_info()[1]
-                error_report(401, message)
-        server.quit()
+            recipients += ',' + send_msg['Cc']
+        # email message
+        email_message(nym_email, recipients, send_msg)
         message = send_success_message(send_msg)
         conf = user_read(nym_addy)
         post_message(message, conf)
