@@ -29,7 +29,7 @@ import nntplib
 import smtplib
 import socket
 import StringIO
-from email.Utils import formatdate
+import email.utils
 from shutil import copyfile
 import gnupg
 import hsub
@@ -89,7 +89,7 @@ def news_headers(hsubval = False):
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
     message += "Injection-Info: mail2news.mixmin.net\n"
-    message += "Date: " + formatdate() + "\n"
+    message += "Date: " + email.utils.formatdate() + "\n"
     return mid, message
 
 def send_success_message(msg):
@@ -455,6 +455,12 @@ def msgparse(message):
 
     # We also send messages for Nymholders after verifying their signature.
     elif xot_addy == 'send':
+        # For Reference:
+        # foo_from = Entire freeformat header (Foo <foo@bar.org>).
+        # foo_email = Correctly formatted address (foo@bar.org).
+        # foo_name = Freeform element of email address (Foo).
+        # foo_addy = LHS of @ in foo_email (foo).
+        # foo_domain = RHS of @ in foo_email
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to send address.')
         logger.debug('Message received for forwarding.')
@@ -466,16 +472,18 @@ def msgparse(message):
         # signature.  It's a matter for debate but currently it's enforced
         # as the From is set to the signature.
         if 'From' in send_msg:
-            if send_msg['From'] == nym_email:
+            send_name, send_email = email.utils.parseaddr(send_msg['From'])
+            del send_msg['From']
+            send_msg['From'] = email.utils.formataddr([send_name, nym_email])
+            if send_email == nym_email:
                 logger.debug('From header in payload matches signature.')
             else:
-                log_message  = 'From header says ' + send_msg['From']
+                log_message  = 'From header says ' + send_email
                 log_message += ' but signature is for ' + nym_email
-                log_message += '. Changing From to match signature.'
+                log_message += '. Using signature address.'
                 logger.info(log_message)
-                send_msg['From'] = nym_email
         else:
-            logger.info('No From header in payload, setting to signature.')
+            logger.info('No From header in payload, using signature.')
             send_msg['From'] = nym_email
         nym_addy, nym_domain = split_email_domain(nym_email)
         conf = user_read(nym_addy)
@@ -497,7 +505,7 @@ def msgparse(message):
         if 'Date' in send_msg:
             logger.debug('Using provided Date of ' + send_msg['Date'])
         else:
-            send_msg['Date'] = formatdate()
+            send_msg['Date'] = email.utils.formatdate()
             logger.debug('Generated Date header of ' + send_msg['Date'])
         logger.debug('Attempting to email message to ' + send_msg['To'])
         if 'Cc' in send_msg:
