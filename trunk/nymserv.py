@@ -45,25 +45,16 @@ SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 
 def init_logging():
-    """Initialise logging.  This should be the first thing done so that all
-    further operations are logged."""
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    global logger
-    logger = logging.getLogger('m2n')
     logpath = LOGPATH.rstrip("/")
     logfile = datestring()
-    filename = "%s/%s" % (logpath, logfile)
-    try:
-        hdlr = logging.FileHandler(filename)
-    except IOError:
-        print "Error: Unable to initialize logger.  Check file permissions?"
-        sys.exit(1)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-    hdlr.setFormatter(formatter)
-    logger.addHandler(hdlr)
-    level = loglevels[LOGLEVEL]
-    logger.setLevel(level)
+    pathfile = "%s/%s" % (logpath, logfile)
+    logging.basicConfig(
+        filename=pathfile,
+        level = loglevels[LOGLEVEL],
+        format = '%(asctime)s %(process)d %(levelname)s %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S')
 
 def underline(char, string):
     "Return a string of char repeated len(string) times."
@@ -81,10 +72,10 @@ def news_headers(hsubval = False):
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
     if hsubval:
-        logger.debug("Generating a real hSub header.")
+        logging.debug("Generating a real hSub header.")
         message += "Subject: " + hsub.hash(hsubval) + '\n'
     else:
-        logger.debug("No hSub defined, generating a fake.")
+        logging.debug("No hSub defined, generating a fake.")
         message += "Subject: " + hsub.cryptorandom(24).encode('hex') + "\n"
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
@@ -197,7 +188,7 @@ def email_message(sender_email, recipient_string, message):
         name, addy = email.utils.parseaddr(recipient)
         logmessage  = 'Sending email from ' + sender_email
         logmessage += ' to ' + addy + '.'
-        logger.info(logmessage)
+        logging.info(logmessage)
         try:
             server.sendmail(sender_email, addy, message.as_string())
         except:
@@ -214,17 +205,17 @@ def post_message(payload, conf):
     # If Symmetric encryption is specified, we don't need to throw the
     # Keyid during Asymmetric encryption.
     if conf['symmetric']:
-        logger.debug('Symmetric encryption defined, not throwing KeyID')
+        logging.debug('Symmetric encryption defined, not throwing KeyID')
         throwkid = False
     else:
-        logger.debug('No Symmetric encryption defined, throwing KeyID')
+        logging.debug('No Symmetric encryption defined, throwing KeyID')
         throwkid = True
-    logger.debug('Signing and Encrypting message for ' + recipient)
+    logging.debug('Signing and Encrypting message for ' + recipient)
     enc_payload = gnupg.signcrypt(recipient, SIGNKEY, PASSPHRASE, payload,
                                   throwkid)
     # Symmetrically wrap the payload if we have a Symmetric password defined.
     if conf['symmetric']:
-        logger.debug('Adding Symmetric Encryption layer')
+        logging.debug('Adding Symmetric Encryption layer')
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
     nntpsend(mid, headers + '\n' +enc_payload)
 
@@ -254,11 +245,11 @@ def user_write(user, confdict):
     conffile = USERPATH + '/' + user + '.conf'
     oldfile = conffile + '.old'
     if os.path.isfile(conffile):
-        logger.debug('Creating backup file ' + oldfile)
+        logging.debug('Creating backup file ' + oldfile)
         copyfile(conffile, oldfile)
-        logger.info('Updating user config file for ' + user)
+        logging.info('Updating user config file for ' + user)
     else:
-        logger.info('Creating user config file for ' + user)
+        logging.info('Creating user config file for ' + user)
     f = open(conffile, 'w')
     for key in confdict:
         value = confdict[key]
@@ -272,7 +263,7 @@ def user_write(user, confdict):
         if not key in confdict:
             message = 'Somehow must-have key ' + key + ' is not in user conf.'
             message += ' Setting it to False, (although this may be silly).'
-            logger.warn(message)
+            logging.warn(message)
             line = key + ': False\n'
             f.write(line)
     f.close()
@@ -294,16 +285,16 @@ def user_update(confdict, text):
             value = confopt.group(2)
             # Some keys are not user definable.
             if key in locked_keys:
-                logger.info('Ignoring request to modify locked Key: ' + key)
+                logging.info('Ignoring request to modify locked Key: ' + key)
             else:
                 # None or False means set the key to False.
                 if value.lower() == 'none' or value.lower() == 'false':
                     confdict[key] = False
                 else:
                     if key in confdict:
-                        logger.info('Updating ' + key + ' option.')
+                        logging.info('Updating ' + key + ' option.')
                     else:
-                        logger.info('Creating ' + key + ' option.')
+                        logging.info('Creating ' + key + ' option.')
                     confdict[key] = value
     return confdict
 
@@ -382,7 +373,7 @@ def msgparse(message):
         error_report(501, 'Message contains no X-Original-To header.')
     xot_email = msg['X-Original-To']
     xot_addy, xot_domain = split_email_domain(xot_email)
-    logger.info('Processing received email message for: ' + xot_email)
+    logging.info('Processing received email message for: ' + xot_email)
     if xot_domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
@@ -396,23 +387,23 @@ def msgparse(message):
         rc, kom = key_or_message(body)
         # If it's a key then this can only be a new Nym request.
         if kom == 'key':
-            logger.debug('Processing a new Nym request.')
+            logging.debug('Processing a new Nym request.')
             # Write any valid looking keyblock data to a tmp file.
             rc, result = key_to_file(body, TMPFILE)
             error_report(rc, result)
             # Try to import the valid looking keyblock.
             rc, fingerprint = gnupg.import_file(TMPFILE)
             error_report(rc, fingerprint)
-            logger.info('Imported key ' + fingerprint)
+            logging.info('Imported key ' + fingerprint)
             # If we've managed to import a key, get the email address from it.
             rc, key_email = gnupg.get_email_from_keyid(fingerprint)
             error_report(rc, key_email)
-            logger.info('Extracted ' + key_email + ' from ' + fingerprint)
+            logging.info('Extracted ' + key_email + ' from ' + fingerprint)
             # Split out the address and domain components of the email address
             key_addy, key_domain = split_email_domain(key_email)
             # Simple check to ensure the key is in the right domain.
             if key_domain <> NYMDOMAIN:
-                logger.info('Deleting key ' + fingerprint)
+                logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
                 error_report(301, 'Wrong domain on ' + key_email + '.')
             # Simple check to ensure the nym isn't on the reserved list.
@@ -422,7 +413,7 @@ def msgparse(message):
                         'hsub' : False,
                         'symmetric' : False}
                 post_message(message, conf)
-                logger.info('Deleting key ' + fingerprint)
+                logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
                 error_report(301, key_addy + ' is a reserved Nym.')
             # Check if we already have a Nym with this address.
@@ -434,7 +425,7 @@ def msgparse(message):
                         'hsub' : False,
                         'symmetric' : False}
                 post_message(message, conf)
-                logger.info('Deleting key ' + fingerprint)
+                logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
                 error_report(301, 'Nym ' + key_addy + ' already exists.')
             # If script execution gets here, we know we're dealing with an
@@ -446,7 +437,7 @@ def msgparse(message):
             f = open(USERPATH + '/' + key_addy + '.key', 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
             f.close()
-            logger.info('Nym ' + key_addy + ' successfully created.')
+            logging.info('Nym ' + key_addy + ' successfully created.')
             message = create_success_message(key_addy)
             post_message(message, conf)
         # If we've received a PGP Message to our config address, it can only
@@ -454,10 +445,10 @@ def msgparse(message):
         elif kom == 'message':
             logmessage  = 'This email is a PGP Message. '
             logmessage += 'Assuming its a modify request.'
-            logger.info(logmessage)
+            logging.info(logmessage)
             rc, mod_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
             error_report(rc, mod_email)
-            logger.debug('Modify Nym request is for ' + mod_email + '.')
+            logging.debug('Modify Nym request is for ' + mod_email + '.')
             mod_addy, mod_domain = split_email_domain(mod_email)
             # We get the user conf dictionary from user_read.
             conf = user_read(mod_addy)
@@ -481,10 +472,10 @@ def msgparse(message):
         # foo_domain = RHS of @ in foo_email
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to send address.')
-        logger.debug('Message received for forwarding.')
+        logging.debug('Message received for forwarding.')
         rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
         error_report(rc, nym_email)
-        logger.info('Verified sender is ' + nym_email)
+        logging.info('Verified sender is ' + nym_email)
         send_msg = email.message_from_string(content)
         # This section checks that the From header matches the verified
         # signature.  It's a matter for debate but currently it's enforced
@@ -494,19 +485,19 @@ def msgparse(message):
             del send_msg['From']
             send_msg['From'] = email.utils.formataddr([send_name, nym_email])
             if send_email == nym_email:
-                logger.debug('From header in payload matches signature.')
+                logging.debug('From header in payload matches signature.')
             else:
                 log_message  = 'From header says ' + send_email
                 log_message += ' but signature is for ' + nym_email
                 log_message += '. Using signature address.'
-                logger.info(log_message)
+                logging.info(log_message)
         else:
-            logger.info('No From header in payload, using signature.')
+            logging.info('No From header in payload, using signature.')
             send_msg['From'] = nym_email
         nym_addy, nym_domain = split_email_domain(nym_email)
         conf = user_read(nym_addy)
         if not 'Subject' in send_msg:
-            logger.debug('No Subject on message, creating a dummy.')
+            logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
         # Check we actually have a recipient for the message
         if 'To' not in send_msg:
@@ -515,24 +506,25 @@ def msgparse(message):
             error_report(301, 'No recipient specified in To header.')
         # If we receive a Message-ID, use it, otherwise generate one.
         if 'Message-ID' in send_msg:
-            logger.debug('Using provided Message-ID')
+            logging.debug('Using provided Message-ID')
         else:
-            logger.debug('Generating Message-ID for outbound message')
+            logging.debug('Generating Message-ID for outbound message')
             send_msg['Message-ID'] = messageid(NYMDOMAIN)
         # If we receive a Date, use it, otherwise generate one.
         if 'Date' in send_msg:
-            logger.debug('Using provided Date of ' + send_msg['Date'])
+            logging.debug('Using provided Date of ' + send_msg['Date'])
         else:
             send_msg['Date'] = email.utils.formatdate()
-            logger.debug('Generated Date header of ' + send_msg['Date'])
+            logging.debug('Generated Date header of ' + send_msg['Date'])
         recipients = send_msg['To']
         if 'Cc' in send_msg:
-            logger.debug("Cc'd to " + send_msg['Cc'])
+            logging.debug("Cc'd to " + send_msg['Cc'])
             recipients += ',' + send_msg['Cc']
         # email message
         email_message(nym_email, recipients, send_msg)
         message = send_success_message(send_msg)
         conf = user_read(nym_addy)
+        logging.info('Posting Send confirmation to ' + nym_email)
         post_message(message, conf)
 
     # If the message isn't to config, it's a message to a Nym.
@@ -541,9 +533,9 @@ def msgparse(message):
             error_report(301, 'No public key for ' + xot_email + '.')
         logmessage  = "Processing inbound message from " + msg['From']
         logmessage += " to " + xot_addy + "."
-        logger.debug(logmessage)
+        logging.debug(logmessage)
         if msg.is_multipart():
-            logger.debug("Message is a Multipart MIME.")
+            logging.debug("Message is a Multipart MIME.")
         message = msg.as_string()
         # Attempt to encrypt and sign the payload
         conf = user_read(xot_addy)
@@ -557,17 +549,17 @@ def error_report(rc, desc):
     # 400   Fail, Warn message
     # 500   Fail, Error message
     if rc >= 100 and rc < 200:
-        logger.debug(desc)
+        logging.debug(desc)
     if rc >= 200 and rc < 300:
-        logger.info(desc)
+        logging.info(desc)
     if rc >= 300 and rc < 400:
-        logger.info(desc + ' Aborting')
+        logging.info(desc + ' Aborting')
         sys.exit(rc)
     if rc >= 400 and rc < 500:
-        logger.warn(desc + ' Aborting')
+        logging.warn(desc + ' Aborting')
         sys.exit(rc)
     if rc >=500 and rc < 600:
-        logger.error(desc + ' Aborting')
+        logging.error(desc + ' Aborting')
         sys.exit(rc)
 
 def nntpsend(mid, content):
@@ -576,27 +568,27 @@ def nntpsend(mid, content):
              'mixmin-in.news.arglkargh.de']
     socket.setdefaulttimeout(10)
     for host in hosts:
-        logger.debug('Posting to ' + host)
+        logging.debug('Posting to ' + host)
         try:
             s = nntplib.NNTP(host)
         except:
-            logger.warn('Untrapped error during connect to ' + host)
+            logging.warn('Untrapped error during connect to ' + host)
             continue
         try:
             s.ihave(mid, payload)
-            logger.info("%s successful IHAVE to %s." % (mid, host))
+            logging.info("%s successful IHAVE to %s." % (mid, host))
         except nntplib.NNTPTemporaryError:
             message = 'IHAVE to ' + host + ' returned a temporary error: '
             message += '%s.' % sys.exc_info()[1]
-            logger.info(message)
+            logging.info(message)
         except nntplib.NNTPPermanentError:
             message = 'IHAVE to ' + host + ' returned a permanent error: '
             message += '%s.' % sys.exc_info()[1]
-            logger.warn(message)
+            logging.warn(message)
         except:
             message = 'IHAVE to ' + host + ' returned an unknown error: '
             message += '%s.' % sys.exc_info()[1]
-            logger.warn(message)
+            logging.warn(message)
         s.quit()
 
 def main():
