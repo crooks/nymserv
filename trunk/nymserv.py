@@ -33,6 +33,7 @@ import email.utils
 from shutil import copyfile
 import gnupg
 import hsub
+import urlfetch
 
 LOGPATH = '/crypt/home/nymserv/log'
 LOGLEVEL = 'debug'
@@ -40,7 +41,7 @@ USERPATH = '/crypt/home/nymserv/users'
 NYMDOMAIN = 'is-not-my.name'
 TMPFILE = '/crypt/home/nymserv/tmp/keyfile.tmp'
 RESERVED_NYMS = ['config', 'list', 'this', 'send', 'abuse', 'admin',
-                 'postmaster', 'webmaster', 'root', 'help']
+                 'postmaster', 'webmaster', 'root', 'help', 'url']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 
@@ -527,7 +528,25 @@ def msgparse(message):
         logging.info('Posting Send confirmation to ' + nym_email)
         post_message(message, conf)
 
-    # If the message isn't to config, it's a message to a Nym.
+    elif xot_addy == 'url':
+        if msg.is_multipart():
+            error_report(301, 'Multipart message sent to url address.')
+        logging.debug('Received message requesting a URL.')
+        rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
+        error_report(rc, nym_email)
+        logging.info('Verified sender is ' + nym_email)
+        nym_addy, nym_domain = split_email_domain(nym_email)
+        conf = user_read(nym_addy)
+        lines = content.split('\n')
+        for line in lines:
+            if line.startswith("SOURCE "):
+                url = line[7:].lstrip()
+                rc, message = urlfetch.geturl(url)
+                if rc >= 100:
+                    error_report(rc, message)
+                post_message(message, conf)
+
+    # If the message has got this far, it's a message to a Nym.
     else:
         if not xot_addy in nymlist:
             error_report(301, 'No public key for ' + xot_email + '.')
