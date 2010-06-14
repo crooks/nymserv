@@ -15,12 +15,26 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-import urllib2
+from urllib2 import Request, urlopen, URLError
 
 def geturl(url):
-    req = urllib2.Request(url)
+    user_agent =  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
+    headers = { 'User-Agent' : user_agent }
+    req = Request(url, None, headers)
     try:
-        f = urllib2.urlopen(req)
-    except urllib2.URLError:
-        return 301, "Unable to retreive " + url
+        f = urlopen(req)
+    except URLError, e:
+        if hasattr(e, 'reason'):
+            return 301, "Could not reach server: %s" % e.reason
+        elif hasattr(e, 'code'):
+            return 301, "Could not fetch %s: %d error" % (url, e.code)
     return 001, f.read()
+
+def main():
+    url = "http://www.google.com/search?num=50&q=helical+anchor"
+    rc, content = geturl(url)
+    print content
+
+# Call main function.
+if (__name__ == "__main__"):
+    main()
