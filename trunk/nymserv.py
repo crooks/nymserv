@@ -558,7 +558,10 @@ def msgparse(message):
         for line in lines:
             if line.startswith("SOURCE "):
                 url = line[7:].lstrip()
-                urls.append(url)
+                if not url in urls:
+                    urls.append(url)
+                else:
+                    logger.info("Duplicate request for: " + url)
             if line.startswith("KEY "):
                 key = line[4:].lstrip()
             if line.startswith("HSUB "):
@@ -572,6 +575,7 @@ def msgparse(message):
             if rc >= 100:
                 error_report(rc, message)
             else:
+                logging.debug("Retreived: " + url)
                 post_symmetric_message(message, hash, key)
 
     # If the message has got this far, it's a message to a Nym.
