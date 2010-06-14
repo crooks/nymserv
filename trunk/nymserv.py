@@ -73,14 +73,17 @@ def news_headers(hsubval = False):
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
     if hsubval:
-        logging.debug("Generating a real hSub header.")
-        message += "Subject: " + hsub.hash(hsubval) + '\n'
+        hash = hsub.hash(hsubval)
+        message += "Subject: " + hash + '\n'
+        logging.debug("Generated a real hSub: " + hash)
     else:
-        logging.debug("No hSub defined, generating a fake.")
-        message += "Subject: " + hsub.cryptorandom(24).encode('hex') + "\n"
+        hash = hsub.cryptorandom(24).encode('hex')
+        message += "Subject: " + hash + "\n"
+        logging.debug("Fake hSub: " + hash)
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
-    message += "Injection-Info: mail2news.mixmin.net\n"
+    message += "Injection-Info: mail2news.mixmin.net; "
+    message += "mail-complaints-to=\"abuse@mixmin.net\"\n"
     message += "Date: " + email.utils.formatdate() + "\n"
     return mid, message
 
@@ -180,6 +183,10 @@ to prove you were the genuine originator of the message.  A failed signature
 would prevent this response to your Nym.\n'''
     return payload
 
+def no_url_message(url):
+    payload = 'Error: Could not retrieve ' + url
+    return payload
+
 def email_message(sender_email, recipient_string, message):
     """Take a sender email address and a From header-like string of
     recipients.  Split out each recipient and try to email them."""
@@ -197,6 +204,13 @@ def email_message(sender_email, recipient_string, message):
             logmessage += ' failed with error %s.' % sys.exc_info()[1]
             error_report(201, logmessage)
     server.quit()
+
+def post_symmetric_message(payload, hash, key):
+    """Symmetrically encrypt a payload and post it."""
+    mid, headers  = news_headers(hash)
+    logging.debug("Symmetric encrypting message for posting.")
+    enc_payload = gnupg.symmetric(key, payload)
+    nntpsend(mid, headers + '\n' + enc_payload)
 
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
@@ -373,19 +387,19 @@ def msgparse(message):
     if not 'X-Original-To' in msg:
         error_report(501, 'Message contains no X-Original-To header.')
     xot_email = msg['X-Original-To']
-    xot_addy, xot_domain = split_email_domain(xot_email)
     logging.info('Processing received email message for: ' + xot_email)
+    xot_addy, xot_domain = split_email_domain(xot_email)
     if xot_domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
+    # Next we want to check if we're receiving a message or a Public Key.
+    rc, kom = key_or_message(body)
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
     if xot_addy == 'config':
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to config address.')
-        # Next we want to check if we're receiving a message or a Public Key.
-        rc, kom = key_or_message(body)
         # If it's a key then this can only be a new Nym request.
         if kom == 'key':
             logging.debug('Processing a new Nym request.')
@@ -529,22 +543,36 @@ def msgparse(message):
         post_message(message, conf)
 
     elif xot_addy == 'url':
+        logging.debug('Received message requesting a URL.')
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to url address.')
-        logging.debug('Received message requesting a URL.')
-        rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
-        error_report(rc, nym_email)
-        logging.info('Verified sender is ' + nym_email)
-        nym_addy, nym_domain = split_email_domain(nym_email)
-        conf = user_read(nym_addy)
+        if not kom == 'message':
+            error_report(301, 'Not an encrypted payload.')
+        rc, content = gnupg.decrypt(body, PASSPHRASE)
+        if rc >= 100:
+            error_report(rc, content)
         lines = content.split('\n')
+        urls = []
+        key = False
+        hash = False
         for line in lines:
             if line.startswith("SOURCE "):
                 url = line[7:].lstrip()
-                rc, message = urlfetch.geturl(url)
-                if rc >= 100:
-                    error_report(rc, message)
-                post_message(message, conf)
+                urls.append(url)
+            if line.startswith("KEY "):
+                key = line[4:].lstrip()
+            if line.startswith("HSUB "):
+                hash = line[5:].lstrip()
+        if len(urls) == 0:
+            error_report(301, "No URL's to retrieve.")
+        if not key:
+            error_report(301, "No symmetric key specified.")
+        for url in urls:
+            rc, message = urlfetch.geturl(url)
+            if rc >= 100:
+                error_report(rc, message)
+            else:
+                post_symmetric_message(message, hash, key)
 
     # If the message has got this far, it's a message to a Nym.
     else:

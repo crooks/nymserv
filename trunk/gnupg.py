@@ -190,6 +190,24 @@ def verify_decrypt(message, passphrase):
             return 301, 'Bad signature for ' + sigfor + '.', None
     return 301, 'No signature found during verify operation.', None
 
+def decrypt(message, passphrase):
+    """Decrypt a PGP message and return it in plain text."""
+    gnupg.options.armor = 1
+    gnupg.options.meta_interactive = 0
+    gnupg.options.always_trust = 1
+    gnupg.options.homedir = KEYRING
+    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger',
+                                                'passphrase'])
+    proc.handles['stdin'].write(message)
+    proc.handles['passphrase'].write(passphrase)
+    proc.handles['stdin'].close()
+    proc.handles['passphrase'].close()
+    result = proc.handles['logger'].read()
+    content = proc.handles['stdout'].read()
+    proc.handles['logger'].close()
+    proc.handles['stdout'].close()
+    return 001, content
+
 def symmetric(passphrase, payload):
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
