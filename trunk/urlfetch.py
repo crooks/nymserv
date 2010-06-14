@@ -25,9 +25,9 @@ def geturl(url):
         f = urlopen(req)
     except URLError, e:
         if hasattr(e, 'reason'):
-            return 301, "Could not reach server: %s" % e.reason
+            return 201, "Could not reach server: %s" % e.reason
         elif hasattr(e, 'code'):
-            return 301, "Could not fetch %s: %d error" % (url, e.code)
+            return 201, "Could not fetch %s: %d error" % (url, e.code)
     return 001, f.read()
 
 def main():
