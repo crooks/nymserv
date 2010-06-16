@@ -544,19 +544,27 @@ def msgparse(message):
         logging.info('Posting Send confirmation to ' + nym_email)
         post_message(message, conf)
 
+    # Is the request for a URL retrieval?
     elif xot_addy == 'url':
         logging.debug('Received message requesting a URL.')
+        # We don't do multipart URL requests.
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to url address.')
+        # The message must be ASCII Armored and Encrypted.
         if not kom == 'message':
             error_report(301, 'Not an encrypted payload.')
+        # Attempt to decrypt the payload
         rc, content = gnupg.decrypt(body, PASSPHRASE)
-        if rc >= 100:
+        # An rc of 200 indicates all is not well.
+        if rc >= 200:
             error_report(rc, content)
         lines = content.split('\n')
+        # These three variables store the required lines from within the
+        # request.
         urls = []
         key = False
         hash = False
+        # Parse each line of the received and decrypted message.
         for line in lines:
             if line.startswith("SOURCE "):
                 url = line[7:].lstrip()
@@ -570,8 +578,11 @@ def msgparse(message):
                 hash = line[5:].lstrip()
         if len(urls) == 0:
             error_report(301, "No URL's to retrieve.")
+        # We cannot proceed without a Symmetric Key.  Posting plain-text to
+        # a.a.m is not a good idea.
         if not key:
             error_report(301, "No symmetric key specified.")
+        # Set up the basics of our multipart MIME response.
         url_msg = MIMEMultipart('alternative')
         url_msg['From'] = 'url@' + NYMDOMAIN
         url_msg['To'] = 'somebody@alt.anonymous.messages'
@@ -579,13 +590,20 @@ def msgparse(message):
         url_msg['Date'] = email.utils.formatdate()
         for url in urls:
             rc, message = urlfetch.geturl(url)
+            # If there's a return code of 100 then we want to log the
+            # plain-text error message, not the html content we were
+            # expecting but didn't get.
             if rc >= 100:
                 error_report(rc, message)
+                url_part = MIMEText(message, 'plain')
             else:
+                # We got a URL so attach it to the MIME message.
                 logging.debug("Retreived: " + url)
                 url_part = MIMEText(message, 'html')
-                url_part['Content-Description'] = url
-                url_msg.attach(url_part)
+            url_part['Content-Description'] = url
+            url_msg.attach(url_part)
+        # This makes the message mbox compliant so we can open it with a
+        # standard mail client like Mutt.
         mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
         mime_msg += url_msg.as_string() + '\n'
         post_symmetric_message(mime_msg, hash, key)
@@ -627,7 +645,7 @@ def error_report(rc, desc):
 
 def nntpsend(mid, content):
     payload = StringIO.StringIO(content)
-    hosts = ['news.mixmin.net', 'news.glorb.com', 'newsin.alt.net',
+    hosts = ['news.glorb.com', 'newsin.alt.net', 'news-in.mixmin.net'
              'mixmin-in.news.arglkargh.de']
     socket.setdefaulttimeout(10)
     for host in hosts:
