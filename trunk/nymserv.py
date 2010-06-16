@@ -30,6 +30,8 @@ import smtplib
 import socket
 import StringIO
 import email.utils
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from shutil import copyfile
 import gnupg
 import hsub
@@ -570,13 +572,23 @@ def msgparse(message):
             error_report(301, "No URL's to retrieve.")
         if not key:
             error_report(301, "No symmetric key specified.")
+        url_msg = MIMEMultipart('alternative')
+        url_msg['From'] = 'url@' + NYMDOMAIN
+        url_msg['To'] = 'somebody@alt.anonymous.messages'
+        url_msg['Subject'] = 'Nym Retrieval'
+        url_msg['Date'] = email.utils.formatdate()
         for url in urls:
             rc, message = urlfetch.geturl(url)
             if rc >= 100:
                 error_report(rc, message)
             else:
                 logging.debug("Retreived: " + url)
-                post_symmetric_message(message, hash, key)
+                url_part = MIMEText(message, 'html')
+                url_part['Content-Description'] = url
+                url_msg.attach(url_part)
+        mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
+        mime_msg += url_msg.as_string() + '\n'
+        post_symmetric_message(mime_msg, hash, key)
 
     # If the message has got this far, it's a message to a Nym.
     else:
