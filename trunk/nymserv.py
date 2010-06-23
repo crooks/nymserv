@@ -353,13 +353,16 @@ def messageid(rightpart):
 def key_or_message(text):
     """Identify if the payload we're processing is in plain-text, a public Key
     or an encrypted message."""
+    if not text:
+        logging.info('Empty payload, treating as text.')
+        return 'text'
     if '-----BEGIN PGP PUBLIC KEY BLOCK-----' in text \
     and '-----END PGP PUBLIC KEY BLOCK-----' in text:
-        return 001, 'key'
+        return 'key'
     if '-----BEGIN PGP MESSAGE-----' in text \
     and '-----END PGP MESSAGE-----' in text:
-        return 001, 'message'
-    return 001, 'text'
+        return 'message'
+    return 'text'
 
 def key_to_file(text, file):
     lines = text.split('\n')
@@ -394,8 +397,11 @@ def msgparse(message):
     if xot_domain <> NYMDOMAIN:
         error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
-    # Next we want to check if we're receiving a message or a Public Key.
-    rc, kom = key_or_message(body)
+    # Next we want to check what type of payload we're processing.
+    if msg.is_multipart():
+        kom = 'multipart'
+    else:
+        kom = key_or_message(body)
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
@@ -645,7 +651,7 @@ def error_report(rc, desc):
 
 def nntpsend(mid, content):
     payload = StringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'news-in.mixmin.net'
+    hosts = ['news.glorb.com', 'newsin.alt.net', 'news-in.mixmin.net',
              'mixmin-in.news.arglkargh.de']
     socket.setdefaulttimeout(10)
     for host in hosts:
