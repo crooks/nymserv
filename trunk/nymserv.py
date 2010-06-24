@@ -431,23 +431,23 @@ def msgparse(message):
                 error_report(301, 'Wrong domain on ' + key_email + '.')
             # Simple check to ensure the nym isn't on the reserved list.
             if key_addy in RESERVED_NYMS:
-                message = reserved_message(fingerprint, key_email)
+                res_message = reserved_message(fingerprint, key_email)
                 conf = {'fingerprint' : fingerprint,
                         'hsub' : False,
                         'symmetric' : False}
-                post_message(message, conf)
+                post_message(res_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
                 error_report(301, key_addy + ' is a reserved Nym.')
             # Check if we already have a Nym with this address.
             if key_addy in nymlist:
-                message = duplicate_message(fingerprint, key_email)
+                dup_message = duplicate_message(fingerprint, key_email)
                 # We need to create a fake user config as this isn't a real
                 # Nym holder.
                 conf = {'fingerprint' : fingerprint,
                         'hsub' : False,
                         'symmetric' : False}
-                post_message(message, conf)
+                post_message(dup_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
                 error_report(301, 'Nym ' + key_addy + ' already exists.')
@@ -461,8 +461,8 @@ def msgparse(message):
             f.write(gnupg.export(fingerprint) + '\n') 
             f.close()
             logging.info('Nym ' + key_addy + ' successfully created.')
-            message = create_success_message(key_addy)
-            post_message(message, conf)
+            suc_message = create_success_message(key_addy)
+            post_message(suc_message, conf)
         # If we've received a PGP Message to our config address, it can only
         # be a signed and encrypted request to modify a Nym config.
         elif kom == 'message':
@@ -480,8 +480,8 @@ def msgparse(message):
             conf = user_update(conf, content)
             # Finally we write the updated user config back to its text file.
             user_write(mod_addy, conf)
-            message = modify_success_message(mod_addy, conf)
-            post_message(message, conf)
+            suc_message = modify_success_message(mod_addy, conf)
+            post_message(suc_message, conf)
         else:
             error_report(301, 'Not key or encrypted message.')
 
@@ -524,8 +524,8 @@ def msgparse(message):
             send_msg['Subject'] = 'No Subject'
         # Check we actually have a recipient for the message
         if 'To' not in send_msg:
-            message = send_no_recipient_message(nym_email, send_msg['Subject'])
-            post_message(message, conf)
+            err_message = send_no_recipient_message(nym_email, send_msg['Subject'])
+            post_message(err_message, conf)
             error_report(301, 'No recipient specified in To header.')
         # If we receive a Message-ID, use it, otherwise generate one.
         if 'Message-ID' in send_msg:
@@ -545,22 +545,16 @@ def msgparse(message):
             recipients += ',' + send_msg['Cc']
         # email message
         email_message(nym_email, recipients, send_msg)
-        message = send_success_message(send_msg)
+        suc_message = send_success_message(send_msg)
         conf = user_read(nym_addy)
         logging.info('Posting Send confirmation to ' + nym_email)
-        post_message(message, conf)
+        post_message(suc_message, conf)
 
     # Is the request for a URL retrieval?
     elif xot_addy == 'url':
         logging.debug('Received message requesting a URL.')
-        # We don't do multipart URL requests.
-        if msg.is_multipart():
-            error_report(301, 'Multipart message sent to url address.')
-        # The message must be ASCII Armored and Encrypted.
-        if not kom == 'message':
-            error_report(301, 'Not an encrypted payload.')
-        # Attempt to decrypt the payload
-        rc, content = gnupg.decrypt(body, PASSPHRASE)
+        # Attempt to decrypt the message
+        rc, content = gnupg.decrypt(message, PASSPHRASE)
         # An rc of 200 indicates all is not well.
         if rc >= 200:
             error_report(rc, content)
@@ -651,7 +645,7 @@ def error_report(rc, desc):
 
 def nntpsend(mid, content):
     payload = StringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'news-in.mixmin.net',
+    hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost',
              'mixmin-in.news.arglkargh.de']
     socket.setdefaulttimeout(10)
     for host in hosts:
