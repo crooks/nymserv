@@ -208,13 +208,28 @@ def decrypt(message, passphrase):
     proc.handles['stdout'].close()
     return 001, content
 
-def symmetric(passphrase, payload):
+def symmetricx(passphrase, payload):
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
     proc = gnupg.run(['--symmetric'], create_fhs=['stdin', 'stdout',
                                                   'passphrase'])
     proc.handles['passphrase'].write(passphrase)
     proc.handles['passphrase'].close()
+    proc.handles['stdin'].write(payload)
+    proc.handles['stdin'].close()
+    ciphertext = proc.handles['stdout'].read()
+    proc.handles['stdout'].close()
+    proc.wait()
+    return ciphertext
+
+def symmetric(passphrase, payload):
+    optlist = ['--cipher-algo','AES256']
+    gnupg.options.armor = 1
+    gnupg.options.meta_interactive = 0
+    #gnupg.options.extra_args.append('--cipher-algo AES256')
+    gnupg.passphrase = passphrase
+    gnupg.options.extra_args = optlist
+    proc = gnupg.run(['--symmetric'], create_fhs=['stdin', 'stdout'])
     proc.handles['stdin'].write(payload)
     proc.handles['stdin'].close()
     ciphertext = proc.handles['stdout'].read()
