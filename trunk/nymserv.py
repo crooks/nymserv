@@ -210,7 +210,7 @@ def email_message(sender_email, recipient_string, message):
 def post_symmetric_message(payload, hash, key):
     """Symmetrically encrypt a payload and post it."""
     mid, headers  = news_headers(hash)
-    logging.debug("Symmetric encrypting message for posting.")
+    logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gnupg.symmetric(key, payload)
     nntpsend(mid, headers + '\n' + enc_payload)
 
@@ -582,6 +582,9 @@ def msgparse(message):
         # a.a.m is not a good idea.
         if not key:
             error_report(301, "No symmetric key specified.")
+        if not hash:
+            logging.debug("No hSub specified, setting to KEY.")
+            hash = key
         # Set up the basics of our multipart MIME response.
         url_msg = MIMEMultipart('alternative')
         url_msg['From'] = 'url@' + NYMDOMAIN
