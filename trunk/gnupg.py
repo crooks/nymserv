@@ -164,12 +164,10 @@ def verify_decrypt(message, passphrase):
     gnupg.options.meta_interactive = 0
     gnupg.options.always_trust = 1
     gnupg.options.homedir = KEYRING
-    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger',
-                                                'passphrase'])
+    gnupg.passphrase = passphrase
+    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger'])
     proc.handles['stdin'].write(message)
-    proc.handles['passphrase'].write(passphrase)
     proc.handles['stdin'].close()
-    proc.handles['passphrase'].close()
     result = proc.handles['logger'].read()
     content = proc.handles['stdout'].read()
     proc.handles['logger'].close()
@@ -196,12 +194,10 @@ def decrypt(message, passphrase):
     gnupg.options.meta_interactive = 0
     gnupg.options.always_trust = 1
     gnupg.options.homedir = KEYRING
-    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger',
-                                                'passphrase'])
+    gnupg.passphrase = passphrase
+    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger'])
     proc.handles['stdin'].write(message)
-    proc.handles['passphrase'].write(passphrase)
     proc.handles['stdin'].close()
-    proc.handles['passphrase'].close()
     result = proc.handles['logger'].read()
     content = proc.handles['stdout'].read()
     proc.handles['logger'].close()
@@ -265,10 +261,8 @@ def signcrypt(recipient, senderkey, passphrase, payload, throw_key = False):
     gnupg.options.extra_args.append('--no-version')
     if throw_key:
         gnupg.options.extra_args.append('--throw-keyid')
-    proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout',
-                                                          'passphrase'])
-    proc.handles['passphrase'].write(passphrase)
-    proc.handles['passphrase'].close()
+    gnupg.passphrase = passphrase
+    proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout'])
     proc.handles['stdin'].write(payload)
     proc.handles['stdin'].close()
     ciphertext = proc.handles['stdout'].read()
