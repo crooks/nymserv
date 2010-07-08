@@ -32,6 +32,7 @@ import StringIO
 import email.utils
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 from shutil import copyfile
 import gnupg
 import hsub
@@ -75,6 +76,7 @@ def news_headers(hsubval = False):
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
     if hsubval:
+        logging.debug("Generating hSub using key: " + hsubval)
         hash = hsub.hash(hsubval)
         message += "Subject: " + hash + '\n'
         logging.debug("Generated a real hSub: " + hash)
@@ -383,6 +385,14 @@ def split_email_domain(address):
     left, right = address.split('@', 1)
     return left, right
 
+def is_img(url):
+    "Return True is the extension on a URL suggests it's an image file."
+    img_exts = ['gif', 'jpg', 'jpeg', 'png']
+    ext = os.path.splitext(url)[1].lstrip('.')
+    if ext in img_exts:
+        return True
+    return False
+
 def msgparse(message):
     "Parse a received email."
     # nymlist willl contain a list of all the nyms currently on the server
@@ -599,6 +609,10 @@ def msgparse(message):
             if rc >= 100:
                 error_report(rc, message)
                 url_part = MIMEText(message, 'plain')
+            elif is_img(url):
+                # We got a URL and it appears to be an image.
+                logging.debug("Retreived: " + url)
+                url_part = MIMEImage(message)
             else:
                 # We got a URL so attach it to the MIME message.
                 logging.debug("Retreived: " + url)
