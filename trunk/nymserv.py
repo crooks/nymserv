@@ -33,6 +33,7 @@ import email.utils
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+from email.mime.application import MIMEApplication
 from shutil import copyfile
 import gnupg
 import hsub
@@ -386,8 +387,16 @@ def split_email_domain(address):
     return left, right
 
 def is_img(url):
-    "Return True is the extension on a URL suggests it's an image file."
+    "Return True if the extension on a URL suggests it's an image file."
     img_exts = ['gif', 'jpg', 'jpeg', 'png']
+    ext = os.path.splitext(url)[1].lstrip('.')
+    if ext in img_exts:
+        return True
+    return False
+
+def is_pdf(url):
+    "Return True if the extension on a URL suggests it's a PDF file."
+    img_exts = ['pdf']
     ext = os.path.splitext(url)[1].lstrip('.')
     if ext in img_exts:
         return True
@@ -611,8 +620,12 @@ def msgparse(message):
                 url_part = MIMEText(message, 'plain')
             elif is_img(url):
                 # We got a URL and it appears to be an image.
-                logging.debug("Retreived: " + url)
+                logging.debug("Retreived image: " + url)
                 url_part = MIMEImage(message)
+            elif is_pdf(url):
+                # We got a URL and it appears to be an image.
+                logging.debug("Retreived PDF: " + url)
+                url_part = MIMEApplication(message, 'pdf')
             else:
                 # We got a URL so attach it to the MIME message.
                 logging.debug("Retreived: " + url)
