@@ -23,17 +23,24 @@ def geturl(url):
     req = Request(url, None, headers)
     try:
         f = urlopen(req)
+
+        # Try and obtain the Content-Type of the URL
+        info = f.info()
+        if 'Content-Type' in info:
+            ct = info['Content-Type']
+        else:
+            ct = None
     except URLError, e:
         if hasattr(e, 'reason'):
-            return 201, "Could not fetch %s. Got: %s" % (url, e.reason)
+            return 201, "Could not fetch %s. Got: %s" % (url, e.reason), None
         elif hasattr(e, 'code'):
-            return 201, "Could not fetch %s: %d error" % (url, e.code)
-    return 001, f.read()
+            return 201, "Could not fetch %s: %d error" % (url, e.code), None
+    return 001, f.read(), ct
 
 def main():
-    url = "http://www.google.com/search?num=50&q=helical+anchor"
-    rc, content = geturl(url)
-    print content
+    url = "http://www.is-not-my.name"
+    rc, content, type = geturl(url)
+    print type
 
 # Call main function.
 if (__name__ == "__main__"):

@@ -68,14 +68,14 @@ def hexiv(hsub, digits = 16):
 def main():
     """Only used for testing purposes.  We Generate an hSub and then check it
     using the same input text."""
-    text = cryptorandom()
-    hsub = hash(text)
+    passphrase = "Pass phrase"
+    hsub = hash(passphrase)
     iv = hexiv(hsub)
-    print "hsub: " + hsub
+    print "Passphrase: " + passphrase
     print "IV:   %s" % iv.encode('hex')
+    print "hsub: " + hsub
     print "hsub length: %d bytes" % len(hsub)
-    print "IV Length:   %2d bytes" % len(iv)
-    print "Should return True:  %s" % check(text, hsub)
+    print "Should return True:  %s" % check(passphrase, hsub)
     print "Should return False: %s" % check('false', hsub)
 
 # Call main function.

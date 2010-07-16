@@ -73,7 +73,7 @@ def news_headers(hsubval = False):
     The only required info is whether to hSub the Subject.  We expect to be
     passed an hsub value if this is required, otherwise a fake is used."""
     mid = messageid('nymserv.mixmin.net')
-    message  = "Path: mail2news.mixmin.net!not-for-mail\n"
+    message  = "Path: nymserv.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
     if hsubval:
@@ -87,7 +87,7 @@ def news_headers(hsubval = False):
         logging.debug("Fake hSub: " + hash)
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
-    message += "Injection-Info: mail2news.mixmin.net; "
+    message += "Injection-Info: nymserv.mixmin.net; "
     message += "mail-complaints-to=\"abuse@mixmin.net\"\n"
     message += "Date: " + email.utils.formatdate() + "\n"
     return mid, message
@@ -215,6 +215,7 @@ def post_symmetric_message(payload, hash, key):
     mid, headers  = news_headers(hash)
     logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gnupg.symmetric(key, payload)
+    logging.debug("Passing message to NNTP Send")
     nntpsend(mid, headers + '\n' + enc_payload)
 
 def post_message(payload, conf):
@@ -610,28 +611,61 @@ def msgparse(message):
         url_msg['To'] = 'somebody@alt.anonymous.messages'
         url_msg['Subject'] = 'Nym Retrieval'
         url_msg['Date'] = email.utils.formatdate()
+        handled_mime_types = ['text', 'application', 'image']
         for url in urls:
-            rc, message = urlfetch.geturl(url)
+            # ct is Content-Type header.
+            rc, message, ct = urlfetch.geturl(url)
+            # All MIME Types consist of a Type and a Sub-Type
             # If there's a return code of 100 then we want to log the
             # plain-text error message, not the html content we were
             # expecting but didn't get.
             if rc >= 100:
                 error_report(rc, message)
                 url_part = MIMEText(message, 'plain')
-            elif is_img(url):
-                # We got a URL and it appears to be an image.
-                logging.debug("Retreived image: " + url)
-                url_part = MIMEImage(message)
-            elif is_pdf(url):
-                # We got a URL and it appears to be an image.
-                logging.debug("Retreived PDF: " + url)
-                url_part = MIMEApplication(message, 'pdf')
+                url_part['Content-Description'] = url
+                url_msg.attach(url_part)
+                continue
+
+            # OK, we have retrieved a URL of some type.  Now to figure our
+            # exactly what it is.
+            logging.debug("Retreived: " + url + "  Type: " + ct)
+
+            # If we don't know the Content-Type, we can't encode it.
+            if not ct:
+                error_message = "Cannot verify Content-Type for " + url
+                logging.warn(error_message)
+                url_part = MIMEText(error_message, 'plain')
+                url_part['Content-Description'] = url
+                url_msg.attach(url_part)
+                continue
+
+            # If we get here then we must have a Content-Type
+            if '/' in ct:
+                type, subtype = ct.split('/')
             else:
-                # We got a URL so attach it to the MIME message.
-                logging.debug("Retreived: " + url)
-                url_part = MIMEText(message, 'html')
+                error_message = "Content-Type " + ct + "has no / in it"
+                logger.warn(error_message)
+                url_part = MIMEText(error_message, 'plain')
+                url_part['Content-Description'] = url
+                url_msg.attach(url_part)
+                continue
+
+            # We have a URL and know what type it is.
+            if not type in handled_mime_types:
+                error_message = "Cannot handle " + type + "files"
+                logger.warn(error_message)
+                url_part = MIMEText(error_message, 'plain')
+            elif type == 'image':
+                # We got a URL and it appears to be an image.
+                url_part = MIMEImage(message, subtype)
+            elif type == 'application':
+                # We got a URL and it appears to be an image.
+                url_part = MIMEApplication(message, subtype)
+            elif type == 'text':
+                url_part = MIMEText(message, subtype)
             url_part['Content-Description'] = url
             url_msg.attach(url_part)
+
         # This makes the message mbox compliant so we can open it with a
         # standard mail client like Mutt.
         mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
@@ -675,8 +709,7 @@ def error_report(rc, desc):
 
 def nntpsend(mid, content):
     payload = StringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost',
-             'mixmin-in.news.arglkargh.de']
+    hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost']
     socket.setdefaulttimeout(10)
     for host in hosts:
         logging.debug('Posting to ' + host)
