@@ -19,9 +19,10 @@
 
 import GnuPGInterface
 import re
+import tempfile
 
 gnupg = GnuPGInterface.GnuPG()
-KEYRING = '/crypt//home/nymserv/keyring'
+KEYRING = '/crypt/home/nymserv/keyring'
 email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
 def export(keyid):
@@ -204,34 +205,23 @@ def decrypt(message, passphrase):
     proc.handles['stdout'].close()
     return 001, content
 
-def symmetricx(passphrase, payload):
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    proc = gnupg.run(['--symmetric'], create_fhs=['stdin', 'stdout',
-                                                  'passphrase'])
-    proc.handles['passphrase'].write(passphrase)
-    proc.handles['passphrase'].close()
-    proc.handles['stdin'].write(payload)
-    proc.handles['stdin'].close()
-    ciphertext = proc.handles['stdout'].read()
-    proc.handles['stdout'].close()
-    proc.wait()
-    return ciphertext
-
 def symmetric(passphrase, payload):
-    optlist = ['--cipher-algo','AES256']
+    """Symmetric encryption seems to choke stdout when handling large files.
+    To overcome this issue, I'm using tempfile to write the output to file
+    instead of stdout."""
+    temp = tempfile.TemporaryFile()
+    optlist = ['--cipher-algo', 'AES256']
     gnupg.options.armor = 1
     gnupg.options.meta_interactive = 0
-    #gnupg.options.extra_args.append('--cipher-algo AES256')
     gnupg.passphrase = passphrase
     gnupg.options.extra_args = optlist
-    proc = gnupg.run(['--symmetric'], create_fhs=['stdin', 'stdout'])
+    proc = gnupg.run(['--symmetric'], create_fhs=['stdin'],
+                                      attach_fhs={'stdout': temp})
     proc.handles['stdin'].write(payload)
     proc.handles['stdin'].close()
-    ciphertext = proc.handles['stdout'].read()
-    proc.handles['stdout'].close()
     proc.wait()
-    return ciphertext
+    temp.seek(0)
+    return temp.read()
 
 def Encrypt(recipient, payload):
     recipients = []
