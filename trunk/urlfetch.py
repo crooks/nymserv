@@ -26,6 +26,7 @@ def geturl(url):
 
         # Try and obtain the Content-Type of the URL
         info = f.info()
+        print info
         if 'Content-Type' in info:
             ct = info['Content-Type']
         else:

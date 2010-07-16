@@ -387,22 +387,6 @@ def split_email_domain(address):
     left, right = address.split('@', 1)
     return left, right
 
-def is_img(url):
-    "Return True if the extension on a URL suggests it's an image file."
-    img_exts = ['gif', 'jpg', 'jpeg', 'png']
-    ext = os.path.splitext(url)[1].lstrip('.')
-    if ext in img_exts:
-        return True
-    return False
-
-def is_pdf(url):
-    "Return True if the extension on a URL suggests it's a PDF file."
-    img_exts = ['pdf']
-    ext = os.path.splitext(url)[1].lstrip('.')
-    if ext in img_exts:
-        return True
-    return False
-
 def msgparse(message):
     "Parse a received email."
     # nymlist willl contain a list of all the nyms currently on the server
@@ -628,7 +612,7 @@ def msgparse(message):
 
             # OK, we have retrieved a URL of some type.  Now to figure our
             # exactly what it is.
-            logging.debug("Retreived: " + url + "  Type: " + ct)
+            logging.debug("Retrieved: " + url + "  Type: " + ct)
 
             # If we don't know the Content-Type, we can't encode it.
             if not ct:
