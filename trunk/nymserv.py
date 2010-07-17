@@ -625,7 +625,10 @@ def msgparse(message):
 
             # If we get here then we must have a Content-Type
             if '/' in ct:
-                type, subtype = ct.split('/')
+                type, slashright = ct.split('/')
+                # The Content-Type can include the Charset.  This is always
+                # delimited with a semi-colon.
+                subtype = slashright.split(';')[0]
             else:
                 error_message = "Content-Type " + ct + "has no / in it"
                 logger.warn(error_message)
