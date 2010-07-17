@@ -628,7 +628,17 @@ def msgparse(message):
                 type, slashright = ct.split('/')
                 # The Content-Type can include the Charset.  This is always
                 # delimited with a semi-colon.
-                subtype = slashright.split(';')[0]
+                elements = slashright.split(';')
+                # First bit after the slash is always the subtype.
+                subtype = elements.pop(0)
+                charset = False
+                for element in elements:
+                    clean_element = element.strip()
+                    if clean_element.startswith('charset='):
+                        charset = clean_element.split('=')[1]
+                        logging.debug('Charset defined as: ' + charset)
+                        break
+
             else:
                 error_message = "Content-Type " + ct + "has no / in it"
                 logger.warn(error_message)
@@ -646,10 +656,13 @@ def msgparse(message):
                 # We got a URL and it appears to be an image.
                 url_part = MIMEImage(message, subtype)
             elif type == 'application':
-                # We got a URL and it appears to be an image.
+                # We got a URL and it appears to be a binary app.
                 url_part = MIMEApplication(message, subtype)
             elif type == 'text':
-                url_part = MIMEText(message, subtype)
+                if charset:
+                    url_part = MIMEText(message, subtype, charset)
+                else:
+                    url_part = MIMEText(message, subtype)
             url_part['Content-Description'] = url
             url_msg.attach(url_part)
 
