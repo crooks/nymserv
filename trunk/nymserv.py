@@ -712,9 +712,12 @@ def nntpsend(mid, content):
     hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost']
     socket.setdefaulttimeout(10)
     for host in hosts:
+        # Reset the File pointer to the beginning.
+        payload.seek(0)
         logging.debug('Posting to ' + host)
         try:
             s = nntplib.NNTP(host)
+            #s.set_debuglevel(2)
         except:
             logging.warn('Untrapped error during connect to ' + host)
             continue
@@ -734,6 +737,7 @@ def nntpsend(mid, content):
             message += '%s.' % sys.exc_info()[1]
             logging.warn(message)
         s.quit()
+    payload.close()
 
 def main():
     "Initialize logging functions, then process messages piped to stdin."
