@@ -22,8 +22,6 @@ import re
 import email
 import logging
 import os.path
-import datetime
-import random
 import sys
 import smtplib
 import cStringIO
@@ -37,6 +35,7 @@ import gnupg
 import hsub
 import urlfetch
 import ihave
+import strutils
 
 LOGPATH = '/crypt/home/nymserv/log'
 LOGLEVEL = 'debug'
@@ -52,7 +51,7 @@ def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
     logpath = LOGPATH.rstrip("/")
-    logfile = datestring()
+    logfile = strutils.datestr()
     pathfile = "%s/%s" % (logpath, logfile)
     logging.basicConfig(
         filename=pathfile,
@@ -60,18 +59,11 @@ def init_logging():
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
 
-def underline(char, string):
-    "Return a string of char repeated len(string) times."
-    string = string.rstrip('\n')
-    count = len(string)
-    retstr = char * count + '\n\n'
-    return retstr
-
 def news_headers(hsubval = False):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
     The only required info is whether to hSub the Subject.  We expect to be
     passed an hsub value if this is required, otherwise a fake is used."""
-    mid = messageid('nymserv.mixmin.net')
+    mid = strutils.messageid(NYMDOMAIN)
     message  = "Path: nymserv.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
     # We use an hsub if we've been passed one.
@@ -109,7 +101,7 @@ def send_success_message(msg):
 def create_success_message(addy):
     "Respond to a successful Nym create request."
     payload  = "Congratulations!\n"
-    payload += underline('-', payload)
+    payload += strutils.underline('-', payload)
     payload += "You have registered the pseudonym " + addy + ".\n"
     payload += """
 From now on, messages sent to this address will be encrypted to your key and
@@ -136,7 +128,7 @@ alt.anonymous.messages, formatted in accordance with your request.\n"""
 def modify_success_message(addy, conf):
     "Respond to successful Nym modification request."
     payload  = "Nym Modification Successful\n"
-    payload += underline('-', payload)
+    payload += strutils.underline('-', payload)
     payload += "You have successfully modified you pseudonym " + addy + ".\n\n"
     payload += "After modification, the options configured on your nym are:-\n"
     for key in conf:
@@ -145,7 +137,7 @@ def modify_success_message(addy, conf):
 
 def duplicate_message(fingerprint, addy):
     payload  = "Error - Duplicate Nym Address " + addy + ".\n"
-    payload += underline('-', payload)
+    payload += strutils.underline('-', payload)
     payload += """
 You attempted to register a Nym that already exists on the server.  You are
 receiving this response because the server can send a message encrypted to
@@ -157,7 +149,7 @@ address.  Hence, the email address must be unique.\n"""
 
 def reserved_message(fingerprint, addy):
     payload  = 'Error - ' + addy + " is a reserved Nym.\n"
-    payload += underline('-', payload)
+    payload += strutils.underline('-', payload)
     payload += """
 You attempted to register a reserved Nym name.  You are receiving this response
 because the server can send a message encrypted to the unique key you created
@@ -168,7 +160,7 @@ but the Nym will not be functional.\n"""
 
 def send_no_recipient_message(email, subject):
     payload = 'Error: Message not sent\n'
-    payload += underline('-', payload)
+    payload += strutils.underline('-', payload)
     payload += 'Your request to send a message from your nym ' + email
     payload += ' failed.\n'
     payload += 'The Subject of the message was: ' + subject + '\n'
@@ -317,41 +309,6 @@ def user_update(confdict, text):
                         logging.info('Creating ' + key + ' option.')
                     confdict[key] = value
     return confdict
-
-def middate():
-    """Return a date in the format yyyymmdd.  This is useful for generating
-    a component of Message-ID."""
-    utctime = datetime.datetime.utcnow()
-    utcstamp = utctime.strftime("%Y%m%d%H%M%S")
-    return utcstamp
-
-def datestring():
-    """As per middate but only return the date element of UTC.  This is used
-    for generating log and history files."""
-    utctime = datetime.datetime.utcnow()
-    utcstamp = utctime.strftime("%Y%m%d")
-    return utcstamp
-
-def midrand(numchars):
-    """Return a string of random chars, either uc, lc or numeric.  This
-    is used to provide randomness in Message-ID's."""
-    randstring = ""
-    while len(randstring) < numchars:
-        rndsrc = random.randint(1,3)
-        if rndsrc == 1:
-            a = random.randint(48,57)
-        elif rndsrc == 2:
-            a = random.randint(65,90)
-        elif rndsrc == 3:
-            a = random.randint(97,122)
-        randstring = randstring + chr(a)
-    return randstring
-
-def messageid(rightpart):
-    """Compile a valid Message-ID."""
-    leftpart = middate() + "." + midrand(12)
-    mid = '<' + leftpart + '@' + rightpart + '>'
-    return mid
 
 def key_or_message(text):
     """Identify if the payload we're processing is in plain-text, a public Key
@@ -535,7 +492,7 @@ def msgparse(message):
             logging.debug('Using provided Message-ID')
         else:
             logging.debug('Generating Message-ID for outbound message')
-            send_msg['Message-ID'] = messageid(NYMDOMAIN)
+            send_msg['Message-ID'] = strutils.messageid(NYMDOMAIN)
         # If we receive a Date, use it, otherwise generate one.
         if 'Date' in send_msg:
             logging.debug('Using provided Date of ' + send_msg['Date'])
