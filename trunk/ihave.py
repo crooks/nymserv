@@ -54,3 +54,25 @@ def send(mid, content):
             logging.warn(message)
         s.quit()
     payload.close()
+
+def main():
+    import strutils
+    from email.utils import formatdate
+    logging.basicConfig(
+        stream=sys.stdout,
+        level = logging.DEBUG,
+        format = '%(asctime)s %(process)d %(levelname)s %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S')
+    mid = strutils.messageid('testing.mixmin.net')
+    message  = "Path: testing.mixmin.net!not-for-mail\n"
+    message += "Message-ID: " + mid + "\n"
+    message += "From: Testing <testing@testing.mixmin.net>\n"
+    message += "Subject: Testing\n"
+    message += "Newsgroups: alt.testing.testing\n"
+    message += "Date: " + formatdate() + "\n"
+    message += "\nTesting"
+    send(mid, message)
+
+# Call main function.
+if (__name__ == "__main__"):
+    main()
