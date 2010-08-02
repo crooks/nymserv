@@ -18,48 +18,15 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-import datetime
-import random
-import nntplib
-import socket
-import cStringIO
-import sys
 from email.Utils import formatdate
-
-def nntpsend(mid, content):
-    payload = cStringIO.StringIO(content)
-    hosts = ['news.mixmin.net', 'news.glorb.com', 'newsin.alt.net']
-    socket.setdefaulttimeout(10)
-    for host in hosts:
-        payload.seek(0)
-        try:
-            s = nntplib.NNTP(host)
-        except:
-            print 'Untrapped error during connect to ' + host
-            continue
-        try:
-            s.ihave(mid, payload)
-            print "%s successful IHAVE to %s." % (mid, host)
-        except nntplib.NNTPTemporaryError:
-            message = 'IHAVE to ' + host + ' returned a temporary error: '
-            message += '%s.' % sys.exc_info()[1]
-            print message
-        except nntplib.NNTPPermanentError:
-            message = 'IHAVE to ' + host + ' returned a permanent error: '
-            message += '%s.' % sys.exc_info()[1]
-            print message
-        except:
-            message = 'IHAVE to ' + host + ' returned an unknown error: '
-            message += '%s.' % sys.exc_info()[1]
-            print message
-        s.quit()
-    payload.close()
+import strutils
+import ihave
 
 def news_headers(newsgroups, subject):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
     The only required info is whether to hSub the Subject.  We expect to be
     passed an hsub value if this is required, otherwise a fake is used."""
-    mid = messageid('nymserv.mixmin.net')
+    mid = strutils.messageid('nymserv.mixmin.net')
     message  = "Path: mail2news.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
     message += "Subject: " + subject + "\n"
@@ -68,42 +35,6 @@ def news_headers(newsgroups, subject):
     message += "Injection-Info: mail2news.mixmin.net\n"
     message += "Date: " + formatdate() + "\n"
     return mid, message
-
-def middate():
-    """Return a date in the format yyyymmdd.  This is useful for generating
-    a component of Message-ID."""
-    utctime = datetime.datetime.utcnow()
-    utcstamp = utctime.strftime("%Y%m%d%H%M%S")
-    return utcstamp
-
-def datestring():
-    """As per middate but only return the date element of UTC.  This is used
-    for generating log and history files."""
-    utctime = datetime.datetime.utcnow()
-    utcstamp = utctime.strftime("%Y%m%d")
-    return utcstamp
-
-def midrand(numchars):
-    """Return a string of random chars, either uc, lc or numeric.  This
-    is used to provide randomness in Message-ID's."""
-    randstring = ""
-    while len(randstring) < numchars:
-        rndsrc = random.randint(1,3)
-        if rndsrc == 1:
-            a = random.randint(48,57)
-        elif rndsrc == 2:
-            a = random.randint(65,90)
-        elif rndsrc == 3:
-            a = random.randint(97,122)
-        randstring = randstring + chr(a)
-    return randstring
-
-def messageid(rightpart):
-    """Compile a valid Message-ID.  This should never be called outside
-    of testing as a message cannot reach the gateway without an ID."""
-    leftpart = middate() + "." + midrand(12)
-    mid = '<' + leftpart + '@' + rightpart + '>'
-    return mid
 
 def main():
     message = """Below is the PGP Public Key for the "Not My Name" Nymserver.
@@ -231,7 +162,7 @@ g8qhm8Xf9eKXWa+UzoTgOWM95w==
     newsgroups = 'alt.privacy.anon-server.stats'
     subject = 'PGP Key for Not-My-Name Nymserver'
     mid, headers = news_headers(newsgroups, subject)
-    nntpsend(mid, headers + '\n' + message)
+    ihave.send(mid, headers + '\n' + message)
 
 # Call main function.
 if (__name__ == "__main__"):
