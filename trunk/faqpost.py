@@ -22,15 +22,16 @@ import datetime
 import random
 import nntplib
 import socket
-import StringIO
+import cStringIO
 import sys
 from email.Utils import formatdate
 
 def nntpsend(mid, content):
-    payload = StringIO.StringIO(content)
+    payload = cStringIO.StringIO(content)
     hosts = ['news.mixmin.net', 'news.glorb.com', 'newsin.alt.net']
     socket.setdefaulttimeout(10)
     for host in hosts:
+        payload.seek(0)
         try:
             s = nntplib.NNTP(host)
         except:
@@ -52,6 +53,7 @@ def nntpsend(mid, content):
             message += '%s.' % sys.exc_info()[1]
             print message
         s.quit()
+    payload.close()
 
 def news_headers(newsgroups, subject):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.

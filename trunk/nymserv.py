@@ -25,10 +25,8 @@ import os.path
 import datetime
 import random
 import sys
-import nntplib
 import smtplib
-import socket
-import StringIO
+import cStringIO
 import email.utils
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -38,6 +36,7 @@ from shutil import copyfile
 import gnupg
 import hsub
 import urlfetch
+import ihave
 
 LOGPATH = '/crypt/home/nymserv/log'
 LOGLEVEL = 'debug'
@@ -216,7 +215,7 @@ def post_symmetric_message(payload, hash, key):
     logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gnupg.symmetric(key, payload)
     logging.debug("Passing message to NNTP Send")
-    nntpsend(mid, headers + '\n' + enc_payload)
+    ihave.send(mid, headers + '\n' + enc_payload)
 
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
@@ -238,7 +237,7 @@ def post_message(payload, conf):
     if conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
-    nntpsend(mid, headers + '\n' +enc_payload)
+    ihave.send(mid, headers + '\n' +enc_payload)
 
 def user_read(user):
     "Read config parameters from a file."
@@ -706,38 +705,6 @@ def error_report(rc, desc):
     if rc >=500 and rc < 600:
         logging.error(desc + ' Aborting')
         sys.exit(rc)
-
-def nntpsend(mid, content):
-    payload = StringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost']
-    socket.setdefaulttimeout(10)
-    for host in hosts:
-        # Reset the File pointer to the beginning.
-        payload.seek(0)
-        logging.debug('Posting to ' + host)
-        try:
-            s = nntplib.NNTP(host)
-            #s.set_debuglevel(2)
-        except:
-            logging.warn('Untrapped error during connect to ' + host)
-            continue
-        try:
-            s.ihave(mid, payload)
-            logging.info("%s successful IHAVE to %s." % (mid, host))
-        except nntplib.NNTPTemporaryError:
-            message = 'IHAVE to ' + host + ' returned a temporary error: '
-            message += '%s.' % sys.exc_info()[1]
-            logging.info(message)
-        except nntplib.NNTPPermanentError:
-            message = 'IHAVE to ' + host + ' returned a permanent error: '
-            message += '%s.' % sys.exc_info()[1]
-            logging.warn(message)
-        except:
-            message = 'IHAVE to ' + host + ' returned an unknown error: '
-            message += '%s.' % sys.exc_info()[1]
-            logging.warn(message)
-        s.quit()
-    payload.close()
 
 def main():
     "Initialize logging functions, then process messages piped to stdin."
