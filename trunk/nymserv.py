@@ -324,20 +324,6 @@ def key_or_message(text):
         return 'message'
     return 'text'
 
-def key_to_file(text, file):
-    lines = text.split('\n')
-    f = open(file, 'w')
-    inblock = False
-    for line in lines:
-        if line == '-----BEGIN PGP PUBLIC KEY BLOCK-----':
-            inblock = True
-        if inblock:
-            f.write(line + '\n')
-        if line == '-----END PGP PUBLIC KEY BLOCK-----':
-            inblock = False
-    f.close()
-    return 101, 'Keybock successfully written to ' + file
-
 def split_email_domain(address):
     "Return the two parts of an email address"
     left, right = address.split('@', 1)
@@ -371,11 +357,8 @@ def msgparse(message):
         # If it's a key then this can only be a new Nym request.
         if kom == 'key':
             logging.debug('Processing a new Nym request.')
-            # Write any valid looking keyblock data to a tmp file.
-            rc, result = key_to_file(body, TMPFILE)
-            error_report(rc, result)
-            # Try to import the valid looking keyblock.
-            rc, fingerprint = gnupg.import_file(TMPFILE)
+            # Try to import the potential keyblock.
+            rc, fingerprint = gnupg.import_key(body)
             error_report(rc, fingerprint)
             logging.info('Imported key ' + fingerprint)
             # If we've managed to import a key, get the email address from it.

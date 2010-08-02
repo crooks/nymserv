@@ -96,15 +96,19 @@ def delete_key(keyid):
     proc = gnupg.run(['--delete-key'], args=idlist)
     #proc.handles['stderr'].close()
 
-def import_file(file):
+def import_key(key):
     """Import a PGP key and if successful, return its Fingerprint"""
+    keyfile = tempfile.NamedTemporaryFile()
+    keyfile.write(key)
+    keyfile.seek(0)
     filelist = []
-    filelist.append(file)
+    filelist.append(keyfile.name)
     gnupg.options.meta_interactive = 0
     gnupg.options.homedir = KEYRING
     proc = gnupg.run(['--import'], args=filelist, create_fhs=['logger'])
     result = proc.handles['logger'].read()
     proc.handles['logger'].close()
+    keyfile.close()
     # We only ever want to work on a single key so we return False if we're
     # trying to process more than one.
     # TODO By the time we realise we've got more than one, we've already
