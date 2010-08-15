@@ -25,7 +25,7 @@ import sys
 
 def send(mid, content):
     payload = cStringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'localhost']
+    hosts = ['news.glorb.com', 'newsin.alt.net', 'news6.mixmin.net']
     socket.setdefaulttimeout(10)
     for host in hosts:
         # Reset the File pointer to the beginning.
