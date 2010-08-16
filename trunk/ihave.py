@@ -21,11 +21,14 @@ import nntplib
 import socket
 import cStringIO
 import logging
+import os.path
 import sys
 
 def send(mid, content):
     payload = cStringIO.StringIO(content)
-    hosts = ['news.glorb.com', 'newsin.alt.net', 'news6.mixmin.net']
+    hosts = file2list('newsservers')
+    if len(hosts) == 0:
+        logging.warn('No news peers defined.')
     socket.setdefaulttimeout(10)
     for host in hosts:
         # Reset the File pointer to the beginning.
@@ -54,6 +57,18 @@ def send(mid, content):
             logging.warn(message)
         s.quit()
     payload.close()
+
+def file2list(filename):
+    """Read a file and return each line as a list item."""
+    items = []
+    if os.path.isfile(filename):
+        readlist = open(filename, 'r')
+        for line in readlist:
+            entry = line.split('#', 1)[0].rstrip()
+            if entry:
+                items.append(entry)
+        readlist.close()
+    return items
 
 def main():
     import strutils
