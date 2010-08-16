@@ -41,9 +41,6 @@ LOGPATH = '/crypt/home/nymserv/log'
 LOGLEVEL = 'debug'
 USERPATH = '/crypt/home/nymserv/users'
 NYMDOMAIN = 'is-not-my.name'
-TMPFILE = '/crypt/home/nymserv/tmp/keyfile.tmp'
-RESERVED_NYMS = ['config', 'list', 'this', 'send', 'abuse', 'admin',
-                 'postmaster', 'webmaster', 'root', 'help', 'url']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 
@@ -373,7 +370,8 @@ def msgparse(message):
                 gnupg.delete_key(fingerprint)
                 error_report(301, 'Wrong domain on ' + key_email + '.')
             # Simple check to ensure the nym isn't on the reserved list.
-            if key_addy in RESERVED_NYMS:
+            reserved_nyms = strutils.file2list('reserved_nyms')
+            if key_addy in reserved_nyms:
                 res_message = reserved_message(fingerprint, key_email)
                 conf = {'fingerprint' : fingerprint,
                         'hsub' : False,

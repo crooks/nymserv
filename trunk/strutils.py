@@ -19,6 +19,7 @@
 
 import datetime
 import random
+import os.path
 
 
 def datetimestr():
@@ -54,6 +55,18 @@ def underline(char, string):
     count = len(string)
     retstr = char * count + '\n\n'
     return retstr
+
+def file2list(filename):
+    """Read a file and return each line as a list item."""
+    items = []
+    if os.path.isfile(filename):
+        readlist = open(filename, 'r')
+        for line in readlist:
+            entry = line.split('#', 1)[0].rstrip()
+            if entry:
+                items.append(entry)
+        readlist.close()
+    return items
 
 def main():
     mid = messageid('testing.invalid')

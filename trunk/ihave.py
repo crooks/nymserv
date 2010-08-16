@@ -21,12 +21,13 @@ import nntplib
 import socket
 import cStringIO
 import logging
-import os.path
 import sys
+
+import strutils
 
 def send(mid, content):
     payload = cStringIO.StringIO(content)
-    hosts = file2list('newsservers')
+    hosts = strutils.file2list('newsservers')
     if len(hosts) == 0:
         logging.warn('No news peers defined.')
     socket.setdefaulttimeout(10)
@@ -58,20 +59,7 @@ def send(mid, content):
         s.quit()
     payload.close()
 
-def file2list(filename):
-    """Read a file and return each line as a list item."""
-    items = []
-    if os.path.isfile(filename):
-        readlist = open(filename, 'r')
-        for line in readlist:
-            entry = line.split('#', 1)[0].rstrip()
-            if entry:
-                items.append(entry)
-        readlist.close()
-    return items
-
 def main():
-    import strutils
     from email.utils import formatdate
     logging.basicConfig(
         stream=sys.stdout,
