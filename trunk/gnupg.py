@@ -20,9 +20,11 @@
 import GnuPGInterface
 import re
 import tempfile
+import os.path
 
 gnupg = GnuPGInterface.GnuPG()
-KEYRING = '/crypt/home/nymserv/keyring'
+HOMEDIR = os.path.expanduser('~')
+KEYRING = os.path.join(HOMEDIR, 'keyring')
 email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
 def export(keyid):

@@ -37,9 +37,11 @@ import urlfetch
 import ihave
 import strutils
 
-LOGPATH = '/crypt/home/nymserv/log'
 LOGLEVEL = 'debug'
-USERPATH = '/crypt/home/nymserv/users'
+HOMEDIR = os.path.expanduser('~')
+LOGPATH = os.path.join(HOMEDIR, 'log')
+USERPATH = os.path.join(HOMEDIR, 'users')
+ETCPATH = os.path.join(HOMEDIR, 'etc')
 NYMDOMAIN = 'is-not-my.name'
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
@@ -370,7 +372,8 @@ def msgparse(message):
                 gnupg.delete_key(fingerprint)
                 error_report(301, 'Wrong domain on ' + key_email + '.')
             # Simple check to ensure the nym isn't on the reserved list.
-            reserved_nyms = strutils.file2list('reserved_nyms')
+            resfile = os.path.join(ETCPATH, 'reserved_nyms')
+            reserved_nyms = strutils.file2list(resfile)
             if key_addy in reserved_nyms:
                 res_message = reserved_message(fingerprint, key_email)
                 conf = {'fingerprint' : fingerprint,

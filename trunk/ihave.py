@@ -22,12 +22,17 @@ import socket
 import cStringIO
 import logging
 import sys
+import os.path
 
 import strutils
 
+HOMEDIR = os.path.expanduser('~')
+ETCPATH = os.path.join(HOMEDIR, 'etc')
+
 def send(mid, content):
     payload = cStringIO.StringIO(content)
-    hosts = strutils.file2list('newsservers')
+    hostfile = os.path.join(ETCPATH, 'newsservers')
+    hosts = strutils.file2list(hostfile)
     if len(hosts) == 0:
         logging.warn('No news peers defined.')
     socket.setdefaulttimeout(10)
