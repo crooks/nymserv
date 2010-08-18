@@ -49,11 +49,9 @@ PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    logpath = LOGPATH.rstrip("/")
-    logfile = strutils.datestr()
-    pathfile = "%s/%s" % (logpath, logfile)
+    logfile = os.path.join(LOGPATH, strutils.datestr())
     logging.basicConfig(
-        filename=pathfile,
+        filename=logfile,
         level = loglevels[LOGLEVEL],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
