@@ -231,7 +231,7 @@ def post_message(payload, conf):
 def user_read(user):
     "Read config parameters from a file."
     confopt_re = re.compile('(\w+?):\s(.+)')
-    conffile = USERPATH + '/' + user + '.conf'
+    conffile = os.path.join(USERPATH, user + '.conf')
     if not os.path.isfile(conffile):
         error_report(401, conffile + ' cannot be opened for reading.')
     f = open(conffile, 'r')
@@ -251,7 +251,7 @@ def user_read(user):
 
 def user_write(user, confdict):
     "Write an updated user conf file."
-    conffile = USERPATH + '/' + user + '.conf'
+    conffile = os.path.join(USERPATH, user + '.conf')
     oldfile = conffile + '.old'
     if os.path.isfile(conffile):
         logging.debug('Creating backup file ' + oldfile)
