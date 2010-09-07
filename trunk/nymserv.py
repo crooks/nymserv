@@ -31,6 +31,7 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from shutil import copyfile
+from optparse import OptionParser
 import gnupg
 import hsub
 import urlfetch
@@ -55,6 +56,14 @@ def init_logging():
         level = loglevels[LOGLEVEL],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
+
+def init_parser():
+    "Parse command line options."
+    parser = OptionParser()
+
+    parser.add_option("-r", "--recipient", dest = "recipient",
+                      help = "Recipient email address")
+    return parser.parse_args()
 
 def news_headers(hsubval = False):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
@@ -328,17 +337,20 @@ def split_email_domain(address):
 
 def msgparse(message):
     "Parse a received email."
+    if not options.recipient:
+        error_report(501, 'No recipient specified.')
+    logging.info('Processing received email message for: ' + options.recipient)
+    recipient_addy, recipient_domain = split_email_domain(options.recipient)
+    if recipient_domain <> NYMDOMAIN:
+        logmessage =  'Message is for an invalid domain: '
+        logmessage += recipient_domain
+        error_report(501, logmessage)
+
     # nymlist willl contain a list of all the nyms currently on the server
     rc, nymlist = gnupg.emails_to_list()
+
     # Use the email library to create the msg object.
     msg = email.message_from_string(message)
-    if not 'X-Original-To' in msg:
-        error_report(501, 'Message contains no X-Original-To header.')
-    xot_email = msg['X-Original-To']
-    logging.info('Processing received email message for: ' + xot_email)
-    xot_addy, xot_domain = split_email_domain(xot_email)
-    if xot_domain <> NYMDOMAIN:
-        error_report(501, 'Received message for invalid domain: ' + xot_domain)
     body = msg.get_payload(decode=1)
     # Next we want to check what type of payload we're processing.
     if msg.is_multipart():
@@ -348,7 +360,7 @@ def msgparse(message):
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
-    if xot_addy == 'config':
+    if recipient_addy == 'config':
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to config address.')
         # If it's a key then this can only be a new Nym request.
@@ -428,7 +440,7 @@ def msgparse(message):
             error_report(301, 'Not key or encrypted message.')
 
     # We also send messages for Nymholders after verifying their signature.
-    elif xot_addy == 'send':
+    elif recipient_addy == 'send':
         # For Reference:
         # foo_from = Entire freeformat header (Foo <foo@bar.org>).
         # foo_email = Correctly formatted address (foo@bar.org).
@@ -493,7 +505,7 @@ def msgparse(message):
         post_message(suc_message, conf)
 
     # Is the request for a URL retrieval?
-    elif xot_addy == 'url':
+    elif recipient_addy == 'url':
         logging.debug('Received message requesting a URL.')
         # Attempt to decrypt the message
         rc, content = gnupg.decrypt(message, PASSPHRASE)
@@ -612,16 +624,16 @@ def msgparse(message):
 
     # If the message has got this far, it's a message to a Nym.
     else:
-        if not xot_addy in nymlist:
-            error_report(301, 'No public key for ' + xot_email + '.')
-        logmessage  = "Processing inbound message from " + msg['From']
-        logmessage += " to " + xot_addy + "."
+        if not recipient_addy in nymlist:
+            error_report(301, 'No public key for ' + options.recipient + '.')
+        logmessage  = "Message is inbound from " + msg['From']
+        logmessage += " to " + recipient_addy + "."
         logging.debug(logmessage)
         if msg.is_multipart():
             logging.debug("Message is a Multipart MIME.")
         message = msg.as_string()
         # Attempt to encrypt and sign the payload
-        conf = user_read(xot_addy)
+        conf = user_read(recipient_addy)
         post_message(message, conf)
 
 def error_report(rc, desc):
@@ -648,6 +660,8 @@ def error_report(rc, desc):
 def main():
     "Initialize logging functions, then process messages piped to stdin."
     init_logging()
+    global options
+    (options, args) = init_parser()
     sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
     msgparse(sys.stdin.read())
 
