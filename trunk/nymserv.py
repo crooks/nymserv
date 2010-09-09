@@ -32,6 +32,7 @@ from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from shutil import copyfile
 from optparse import OptionParser
+# My libraries
 import gnupg
 import hsub
 import urlfetch
@@ -562,7 +563,7 @@ def msgparse(message):
 
             # OK, we have retrieved a URL of some type.  Now to figure our
             # exactly what it is.
-            logging.debug("Retrieved: " + url + "  Type: " + ct)
+            logging.info("Retrieved: " + url + "  Type: " + ct)
 
             # If we don't know the Content-Type, we can't encode it.
             if not ct:
@@ -662,8 +663,11 @@ def main():
     init_logging()
     global options
     (options, args) = init_parser()
-    sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
-    msgparse(sys.stdin.read())
+    if options.recipient:
+        sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
+        msgparse(sys.stdin.read())
+    else:
+        sys.stdout.write("Error: No recipient specified.\n")
 
 # Call main function.
 if (__name__ == "__main__"):
