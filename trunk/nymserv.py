@@ -26,6 +26,7 @@ import sys
 import smtplib
 import cStringIO
 import email.utils
+from pysqlite2 import dbapi2 as sqlite
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -65,6 +66,21 @@ def init_parser():
     parser.add_option("-r", "--recipient", dest = "recipient",
                       help = "Recipient email address")
     return parser.parse_args()
+
+def check_tables():
+    """Check if the required database and tables exist.  If not, create
+    them.  This also provides a reference for the table formats."""
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [row[0] for row in cursor.fetchall()]
+    if not tables or not "users" in tables:
+        cursor.execute('''CREATE TABLE users (
+            email text unique,
+            fingerprint TEXT unique,
+            symmetric TEXT,
+            hsub TEXT,
+            created TEXT,
+            used TEXT)''')
+        con.commit()
 
 def news_headers(hsubval = False):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
@@ -293,28 +309,28 @@ def user_update(confdict, text):
     this function, confdict must already be populated using user_read."""
     # version is locked because people send PGP keys in Modify requests and
     # the Version header in the data is treated as a config option.
-    locked_keys = ['fingerprint', 'version']
-    confopt_re = re.compile('(\w+?):\s(.+)')
+    valid_fields = ['symmetric', 'hsub']
+    confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
     for line in lines:
         confopt = confopt_re.match(line)
         if confopt:
-            # Set key to the key name and value to its content.
-            key = confopt.group(1).lower()
+            # Set field to the header name and value to its content.
+            field = confopt.group(1).lower()
             value = confopt.group(2)
-            # Some keys are not user definable.
-            if key in locked_keys:
-                logging.info('Ignoring request to modify locked Key: ' + key)
+            # If we match a field:value pair, is it valid?
+            if not field in valid_fields:
+                logging.info('Invalid field in modify request: ' + field)
+                continue
+            # None or False means set the field to False.
+            if value.lower() == 'none' or value.lower() == 'false':
+                confdict[field] = False
             else:
-                # None or False means set the key to False.
-                if value.lower() == 'none' or value.lower() == 'false':
-                    confdict[key] = False
+                if field in confdict:
+                    logging.info('Updating ' + field + ' option.')
                 else:
-                    if key in confdict:
-                        logging.info('Updating ' + key + ' option.')
-                    else:
-                        logging.info('Creating ' + key + ' option.')
-                    confdict[key] = value
+                    logging.info('Creating ' + field + ' option.')
+                confdict[field] = value
     return confdict
 
 def key_or_message(text):
@@ -333,6 +349,8 @@ def key_or_message(text):
 
 def split_email_domain(address):
     "Return the two parts of an email address"
+    if not '@' in address:
+        error_report(401, address + ': Address is not fully-qualified')
     left, right = address.split('@', 1)
     return left, right
 
@@ -366,7 +384,7 @@ def msgparse(message):
             error_report(301, 'Multipart message sent to config address.')
         # If it's a key then this can only be a new Nym request.
         if kom == 'key':
-            logging.debug('Processing a new Nym request.')
+            logging.info('This is a new Nym request.')
             # Try to import the potential keyblock.
             rc, fingerprint = gnupg.import_key(body)
             error_report(rc, fingerprint)
@@ -411,6 +429,9 @@ def msgparse(message):
             conf = {'fingerprint' : fingerprint,
                     'hsub' : False,
                     'symmetric' : False}
+            cursor.execute("""INSERT INTO users (email, fingerprint)
+                            VALUES (?, ?)""", (key_email, fingerprint))
+            con.commit()
             user_write(key_addy, conf)
             f = open(USERPATH + '/' + key_addy + '.key', 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
@@ -663,6 +684,14 @@ def main():
     init_logging()
     global options
     (options, args) = init_parser()
+    dbfile = os.path.join(USERPATH, 'nymserv.db')
+    global con
+    con = sqlite.connect(dbfile)
+    global cursor
+    cursor = con.cursor()
+    # Check tables exist
+    check_tables()
+
     if options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(sys.stdin.read())
