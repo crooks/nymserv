@@ -67,21 +67,6 @@ def init_parser():
                       help = "Recipient email address")
     return parser.parse_args()
 
-def check_tables():
-    """Check if the required database and tables exist.  If not, create
-    them.  This also provides a reference for the table formats."""
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [row[0] for row in cursor.fetchall()]
-    if not tables or not "users" in tables:
-        cursor.execute('''CREATE TABLE users (
-            email text unique,
-            fingerprint TEXT unique,
-            symmetric TEXT,
-            hsub TEXT,
-            created TEXT,
-            used TEXT)''')
-        con.commit()
-
 def news_headers(hsubval = False):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
     The only required info is whether to hSub the Subject.  We expect to be
@@ -429,9 +414,6 @@ def msgparse(message):
             conf = {'fingerprint' : fingerprint,
                     'hsub' : False,
                     'symmetric' : False}
-            cursor.execute("""INSERT INTO users (email, fingerprint)
-                            VALUES (?, ?)""", (key_email, fingerprint))
-            con.commit()
             user_write(key_addy, conf)
             f = open(USERPATH + '/' + key_addy + '.key', 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
@@ -684,14 +666,6 @@ def main():
     init_logging()
     global options
     (options, args) = init_parser()
-    dbfile = os.path.join(USERPATH, 'nymserv.db')
-    global con
-    con = sqlite.connect(dbfile)
-    global cursor
-    cursor = con.cursor()
-    # Check tables exist
-    check_tables()
-
     if options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(sys.stdin.read())
