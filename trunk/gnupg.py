@@ -67,7 +67,7 @@ def emails_to_list():
     for line in lines:
         is_email = re.search(email_re, line)
         if is_email:
-            addresses.append(is_email.group(1))
+            addresses.append(is_email.group(0))
     return 001, addresses
 
 def fingerprint(email):

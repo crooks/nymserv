@@ -67,6 +67,8 @@ def init_parser():
                       help = "Recipient email address")
     parser.add_option("-l", "--list", dest = "list",
                       help = "List user configuration")
+    parser.add_option("--cleanup", dest = "cleanup", action = "store_true",
+                      default=False, help = "Perform some housekeeping")
     return parser.parse_args()
 
 def news_headers(hsubval = False):
@@ -247,55 +249,6 @@ def post_message(payload, conf):
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
     ihave.send(mid, headers + '\n' +enc_payload)
 
-def user_read(user):
-    "Read config parameters from a file."
-    confopt_re = re.compile('(\w+?):\s(.+)')
-    conffile = os.path.join(USERPATH, user + '.conf')
-    if not os.path.isfile(conffile):
-        error_report(401, conffile + ' cannot be opened for reading.')
-    f = open(conffile, 'r')
-    confdict = {}
-    for line in f:
-        confopt = confopt_re.match(line)
-        if confopt:
-            key = confopt.group(1).lower()
-            value = confopt.group(2)
-            # We make special cases for writing True or False to dict values.
-            if value.lower() == 'false':
-                confdict[key] = False
-            else:
-                confdict[key] = value
-    f.close()
-    return confdict
-
-def user_write(user, confdict):
-    "Write an updated user conf file."
-    conffile = os.path.join(USERPATH, user + '.conf')
-    oldfile = conffile + '.old'
-    if os.path.isfile(conffile):
-        logging.debug('Creating backup file ' + oldfile)
-        copyfile(conffile, oldfile)
-        logging.info('Updating user config file for ' + user)
-    else:
-        logging.info('Creating user config file for ' + user)
-    f = open(conffile, 'w')
-    for key in confdict:
-        value = confdict[key]
-        if not value:
-            line = key + ': False\n'
-        else:
-            line = key + ': ' + value + '\n'
-        f.write(line)
-    must_have_keys = ['fingerprint', 'hsub', 'symmetric']
-    for key in must_have_keys:
-        if not key in confdict:
-            message = 'Somehow must-have key ' + key + ' is not in user conf.'
-            message += ' Setting it to False, (although this may be silly).'
-            logging.warn(message)
-            line = key + ': False\n'
-            f.write(line)
-    f.close()
-
 def user_update(text):
     """Update a user's config paramters from a text body. The current list of
     options is read from confdict and updated with those in the text.  To use
@@ -403,7 +356,7 @@ def msgparse(message):
                 gnupg.delete_key(fingerprint)
                 error_report(301, key_addy + ' is a reserved Nym.')
             # Check if we already have a Nym with this address.
-            if key_addy in nymlist:
+            if key_email in nymlist:
                 dup_message = duplicate_message(fingerprint, key_email)
                 # We need to create a fake user config as this isn't a real
                 # Nym holder.
@@ -424,10 +377,7 @@ def msgparse(message):
             userconf = shelve.open(userfile)
             userconf['fingerprint'] = fingerprint
             userconf['created'] = strutils.datestr()
-            conf = {'fingerprint' : fingerprint,
-                    'hsub' : False,
-                    'symmetric' : False}
-            user_write(key_addy, conf)
+            # Write the public key to a file, just in case we ever need it.
             filename = os.path.join(USERPATH, key_email + '.key')
             f = open(filename, 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
@@ -446,22 +396,13 @@ def msgparse(message):
             error_report(rc, mod_email)
             logging.debug('Modify Nym request is for ' + mod_email + '.')
             mod_addy, mod_domain = split_email_domain(mod_email)
-            # We get the user conf dictionary from user_read.
             userfile = os.path.join(USERPATH, mod_email + '.db')
-
-            # TODO This is a kludge to migrate old user conf files to shelves.
-            if not os.path.exists(userfile):
-                conf = user_read(mod_addy)
+            if os.path.exists(userfile):
                 userconf = shelve.open(userfile)
-                for key in conf:
-                    userconf[key] = conf[key]
-                userconf.sync()
             else:
-                userconf = shelve.open(userfile)
-            # TODO End of kludge
-
-            # User conf is updated by passing a plain text block of
-            # key: options to user_update.
+                error_report(501, userfile + ': File not found.'
+            # user_update creates a new dict of keys that need to be created or
+            # changed in the master userconf dict.
             moddict = user_update(content)
             for key in moddict:
                 if key in userconf:
@@ -515,16 +456,10 @@ def msgparse(message):
             send_msg['From'] = nym_email
         nym_addy, nym_domain = split_email_domain(nym_email)
         userfile = os.path.join(USERPATH, nym_email + '.db')
-        # TODO This is a kludge to migrate old user conf files to shelves.
-        if not os.path.exists(userfile):
-            conf = user_read(mod_addy)
+        if os.path.exists(userfile):
             userconf = shelve.open(userfile)
-            for key in conf:
-                userconf[key] = conf[key]
-            userconf.sync()
         else:
-            userconf = shelve.open(userfile)
-            # TODO End of kludge
+            error_report(501, userfile + ': File not found.'
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
@@ -559,7 +494,7 @@ def msgparse(message):
             userconf['sent'] += 1
         else:
             userconf['sent'] = 1
-        userconf['lastsent'] = strutils.datestr()
+        userconf['last_sent'] = strutils.datestr()
         userconf.close()
 
     # Is the request for a URL retrieval?
@@ -682,7 +617,7 @@ def msgparse(message):
 
     # If the message has got this far, it's a message to a Nym.
     else:
-        if not recipient_addy in nymlist:
+        if not options.recipient in nymlist:
             error_report(301, 'No public key for ' + options.recipient + '.')
         logmessage  = "Message is inbound from " + msg['From']
         logmessage += " to " + recipient_addy + "."
@@ -690,9 +625,18 @@ def msgparse(message):
         if msg.is_multipart():
             logging.debug("Message is a Multipart MIME.")
         message = msg.as_string()
-        # Attempt to encrypt and sign the payload
-        conf = user_read(recipient_addy)
-        post_message(message, conf)
+        userfile = os.path.join(USERPATH, options.recipient + '.db')
+        if os.path.exists(userfile):
+            userconf = shelve.open(userfile)
+        else:
+            error_report(501, userfile + ': File not found.'
+        post_message(message, userconf)
+        if 'received' in userconf:
+            userconf['received'] += 1
+        else:
+            userconf['received'] = 1
+        userconf['last_received'] = strutils.datestr()
+        userconf.close()
 
 def error_report(rc, desc):
     # 000   Success, no message
@@ -728,14 +672,37 @@ def stdout_user(user):
     userconf.close()
     sys.exit(0)
 
+def cleanup():
+    resfile = os.path.join(ETCPATH, 'reserved_nyms')
+    reserved_nyms = strutils.file2list(resfile)
+    valid_keys = ['fingerprint', 'created', 'hsub', 'sent', 'last_sent',
+                  'symmetric', 'modified', 'received', 'last_received']
+    rc, nymlist = gnupg.emails_to_list()
+    for nym in nymlist:
+        addy, domain = split_email_domain(nym)
+        if addy in reserved_nyms:
+            continue
+        userfile = os.path.join(USERPATH, nym + '.db')
+        if os.path.exists(userfile):
+            userconf = shelve.open(userfile)
+            if not 'created' in userconf:
+                userconf['created'] = strutils.datestr()
+            for key in userconf:
+                if not key in valid_keys:
+                    del userconf[key]
+            userconf.close()
+            sys.stdout.write(nym + "\n")
+    sys.exit(0)    
+
 def main():
     "Initialize logging functions, then process messages piped to stdin."
     init_logging()
     global options
     (options, args) = init_parser()
+    if options.cleanup:
+        cleanup()
     if options.list:
         stdout_user(options.list)
-        sys.exit(0)
     if options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(sys.stdin.read())
