@@ -514,14 +514,25 @@ def msgparse(message):
             logging.info('No From header in payload, using signature.')
             send_msg['From'] = nym_email
         nym_addy, nym_domain = split_email_domain(nym_email)
-        conf = user_read(nym_addy)
+        userfile = os.path.join(USERPATH, nym_email + '.db')
+        # TODO This is a kludge to migrate old user conf files to shelves.
+        if not os.path.exists(userfile):
+            conf = user_read(mod_addy)
+            userconf = shelve.open(userfile)
+            for key in conf:
+                userconf[key] = conf[key]
+            userconf.sync()
+        else:
+            userconf = shelve.open(userfile)
+            # TODO End of kludge
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
         # Check we actually have a recipient for the message
         if 'To' not in send_msg:
             err_message = send_no_recipient_message(nym_email, send_msg['Subject'])
-            post_message(err_message, conf)
+            post_message(err_message, userconf)
+            userconf.close()
             error_report(301, 'No recipient specified in To header.')
         # If we receive a Message-ID, use it, otherwise generate one.
         if 'Message-ID' in send_msg:
@@ -542,9 +553,14 @@ def msgparse(message):
         # email message
         email_message(nym_email, recipients, send_msg)
         suc_message = send_success_message(send_msg)
-        conf = user_read(nym_addy)
         logging.info('Posting Send confirmation to ' + nym_email)
-        post_message(suc_message, conf)
+        post_message(suc_message, userconf)
+        if 'sent' in userconf:
+            userconf['sent'] += 1
+        else:
+            userconf['sent'] = 1
+        userconf['lastsent'] = strutils.datestr()
+        userconf.close()
 
     # Is the request for a URL retrieval?
     elif recipient_addy == 'url':
@@ -700,13 +716,15 @@ def error_report(rc, desc):
         sys.exit(rc)
 
 def stdout_user(user):
+    """Respond to a --list <email> request with a list of configuration
+    options for the given user."""
     userfile = os.path.join(USERPATH, user + '.db')
     if not os.path.exists(userfile):
         sys.stdout.write(userfile + ': File not found\n')
         sys.exit(1)
     userconf = shelve.open(userfile)
     for key in userconf:
-        sys.stdout.write(key + ': ' + userconf[key] + '\n')
+        sys.stdout.write('%s: %s\n' % (key, userconf[key]))
     userconf.close()
     sys.exit(0)
 
