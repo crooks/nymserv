@@ -31,7 +31,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
-from shutil import copyfile
 from optparse import OptionParser
 # My libraries
 import gnupg
@@ -400,7 +399,7 @@ def msgparse(message):
             if os.path.exists(userfile):
                 userconf = shelve.open(userfile)
             else:
-                error_report(501, userfile + ': File not found.'
+                error_report(501, userfile + ': File not found.')
             # user_update creates a new dict of keys that need to be created or
             # changed in the master userconf dict.
             moddict = user_update(content)
@@ -459,7 +458,7 @@ def msgparse(message):
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
-            error_report(501, userfile + ': File not found.'
+            error_report(501, userfile + ': File not found.')
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
@@ -629,7 +628,7 @@ def msgparse(message):
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
-            error_report(501, userfile + ': File not found.'
+            error_report(501, userfile + ': File not found.')
         post_message(message, userconf)
         if 'received' in userconf:
             userconf['received'] += 1
