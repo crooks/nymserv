@@ -23,10 +23,10 @@ import email
 import logging
 import os.path
 import sys
+import shelve
 import smtplib
 import cStringIO
 import email.utils
-from pysqlite2 import dbapi2 as sqlite
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -65,6 +65,8 @@ def init_parser():
 
     parser.add_option("-r", "--recipient", dest = "recipient",
                       help = "Recipient email address")
+    parser.add_option("-l", "--list", dest = "list",
+                      help = "List user configuration")
     return parser.parse_args()
 
 def news_headers(hsubval = False):
@@ -84,11 +86,12 @@ def news_headers(hsubval = False):
         hash = hsub.cryptorandom(24).encode('hex')
         message += "Subject: " + hash + "\n"
         logging.debug("Fake hSub: " + hash)
+    message += "Date: " + email.utils.formatdate() + "\n"
     message += "Message-ID: " + mid + "\n"
     message += "Newsgroups: alt.anonymous.messages\n"
     message += "Injection-Info: nymserv.mixmin.net; "
     message += "mail-complaints-to=\"abuse@mixmin.net\"\n"
-    message += "Date: " + email.utils.formatdate() + "\n"
+    message += "Injection-Date: " + email.utils.formatdate() + "\n"
     return mid, message
 
 def send_success_message(msg):
@@ -220,11 +223,16 @@ def post_symmetric_message(payload, hash, key):
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
     'conf' contains specific formatting instructions."""
+    if not 'hsub' in conf:
+        conf['hsub'] = False
     mid, headers  = news_headers(conf['hsub'])
+    if not 'fingerprint' in conf:
+        conf.close()
+        error_report(501, 'User shelve contains no fingerprint key.')
     recipient = conf['fingerprint']
     # If Symmetric encryption is specified, we don't need to throw the
     # Keyid during Asymmetric encryption.
-    if conf['symmetric']:
+    if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Symmetric encryption defined, not throwing KeyID')
         throwkid = False
     else:
@@ -234,7 +242,7 @@ def post_message(payload, conf):
     enc_payload = gnupg.signcrypt(recipient, SIGNKEY, PASSPHRASE, payload,
                                   throwkid)
     # Symmetrically wrap the payload if we have a Symmetric password defined.
-    if conf['symmetric']:
+    if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
     ihave.send(mid, headers + '\n' +enc_payload)
@@ -288,7 +296,7 @@ def user_write(user, confdict):
             f.write(line)
     f.close()
 
-def user_update(confdict, text):
+def user_update(text):
     """Update a user's config paramters from a text body. The current list of
     options is read from confdict and updated with those in the text.  To use
     this function, confdict must already be populated using user_read."""
@@ -297,6 +305,7 @@ def user_update(confdict, text):
     valid_fields = ['symmetric', 'hsub']
     confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
+    moddict = {}
     for line in lines:
         confopt = confopt_re.match(line)
         if confopt:
@@ -309,14 +318,10 @@ def user_update(confdict, text):
                 continue
             # None or False means set the field to False.
             if value.lower() == 'none' or value.lower() == 'false':
-                confdict[field] = False
+                moddict[field] = False
             else:
-                if field in confdict:
-                    logging.info('Updating ' + field + ' option.')
-                else:
-                    logging.info('Creating ' + field + ' option.')
-                confdict[field] = value
-    return confdict
+                moddict[field] = value
+    return moddict
 
 def key_or_message(text):
     """Identify if the payload we're processing is in plain-text, a public Key
@@ -350,7 +355,7 @@ def msgparse(message):
         logmessage += recipient_domain
         error_report(501, logmessage)
 
-    # nymlist willl contain a list of all the nyms currently on the server
+    # nymlist will contain a list of all the nyms currently on the server
     rc, nymlist = gnupg.emails_to_list()
 
     # Use the email library to create the msg object.
@@ -411,16 +416,26 @@ def msgparse(message):
                 error_report(301, 'Nym ' + key_addy + ' already exists.')
             # If script execution gets here, we know we're dealing with an
             # accepted new Nym.
+            userfile = os.path.join(USERPATH, key_email + '.db')
+            # This is a creation process, the user file can't already exist.
+            if os.path.exists(userfile):
+                error_report(501, userfile + ': File already exists.')
+            logging.info('Creating ' + userfile)
+            userconf = shelve.open(userfile)
+            userconf['fingerprint'] = fingerprint
+            userconf['created'] = strutils.datestr()
             conf = {'fingerprint' : fingerprint,
                     'hsub' : False,
                     'symmetric' : False}
             user_write(key_addy, conf)
-            f = open(USERPATH + '/' + key_addy + '.key', 'w')
+            filename = os.path.join(USERPATH, key_email + '.key')
+            f = open(filename, 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
             f.close()
             logging.info('Nym ' + key_addy + ' successfully created.')
             suc_message = create_success_message(key_addy)
-            post_message(suc_message, conf)
+            post_message(suc_message, userconf)
+            userconf.close()
         # If we've received a PGP Message to our config address, it can only
         # be a signed and encrypted request to modify a Nym config.
         elif kom == 'message':
@@ -432,14 +447,37 @@ def msgparse(message):
             logging.debug('Modify Nym request is for ' + mod_email + '.')
             mod_addy, mod_domain = split_email_domain(mod_email)
             # We get the user conf dictionary from user_read.
-            conf = user_read(mod_addy)
+            userfile = os.path.join(USERPATH, mod_email + '.db')
+
+            # TODO This is a kludge to migrate old user conf files to shelves.
+            if not os.path.exists(userfile):
+                conf = user_read(mod_addy)
+                userconf = shelve.open(userfile)
+                for key in conf:
+                    userconf[key] = conf[key]
+                userconf.sync()
+            else:
+                userconf = shelve.open(userfile)
+            # TODO End of kludge
+
             # User conf is updated by passing a plain text block of
             # key: options to user_update.
-            conf = user_update(conf, content)
-            # Finally we write the updated user config back to its text file.
-            user_write(mod_addy, conf)
-            suc_message = modify_success_message(mod_addy, conf)
-            post_message(suc_message, conf)
+            moddict = user_update(content)
+            for key in moddict:
+                if key in userconf:
+                    logmes  = 'Changing key %s from %s' % (key, userconf[key])
+                    logmes += ' to %s.' % moddict[key]
+                    logging.debug(logmes)
+                else:
+                    logmes  = 'Inserting key %s' % key
+                    logmes += ' with value %s.' % moddict[key]
+                logging.debug(logmes)
+                userconf[key] = moddict[key]
+            # Add (or update) the modified date and then close the shelve.
+            userconf['modified'] = strutils.datestr()
+            suc_message = modify_success_message(mod_addy, userconf)
+            post_message(suc_message, userconf)
+            userconf.close()
         else:
             error_report(301, 'Not key or encrypted message.')
 
@@ -661,11 +699,25 @@ def error_report(rc, desc):
         logging.error(desc + ' Aborting')
         sys.exit(rc)
 
+def stdout_user(user):
+    userfile = os.path.join(USERPATH, user + '.db')
+    if not os.path.exists(userfile):
+        sys.stdout.write(userfile + ': File not found\n')
+        sys.exit(1)
+    userconf = shelve.open(userfile)
+    for key in userconf:
+        sys.stdout.write(key + ': ' + userconf[key] + '\n')
+    userconf.close()
+    sys.exit(0)
+
 def main():
     "Initialize logging functions, then process messages piped to stdin."
     init_logging()
     global options
     (options, args) = init_parser()
+    if options.list:
+        stdout_user(options.list)
+        sys.exit(0)
     if options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(sys.stdin.read())
