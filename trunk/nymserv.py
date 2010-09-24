@@ -45,7 +45,7 @@ LOGPATH = os.path.join(HOMEDIR, 'log')
 USERPATH = os.path.join(HOMEDIR, 'users')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 NYMDOMAIN = 'is-not-my.name'
-HOSTEDDOMAINS = ['is-not-my.name']
+HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 
