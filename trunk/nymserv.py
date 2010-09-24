@@ -45,6 +45,7 @@ LOGPATH = os.path.join(HOMEDIR, 'log')
 USERPATH = os.path.join(HOMEDIR, 'users')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 NYMDOMAIN = 'is-not-my.name'
+HOSTEDDOMAINS = ['is-not-my.name']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 
@@ -110,11 +111,11 @@ def send_success_message(msg):
     payload += "The Message-ID was: " + msg['Message-ID'] + "\n"
     return payload
 
-def create_success_message(addy):
+def create_success_message(email):
     "Respond to a successful Nym create request."
     payload  = "Congratulations!\n"
     payload += strutils.underline('-', payload)
-    payload += "You have registered the pseudonym " + addy + ".\n"
+    payload += "You have registered the pseudonym " + email + ".\n"
     payload += """
 From now on, messages sent to this address will be encrypted to your key and
 signed by the Nymserver before being delivered to the newsgroup
@@ -137,14 +138,15 @@ Modifications to your Nym will receive a confirmation message in
 alt.anonymous.messages, formatted in accordance with your request.\n"""
     return payload
 
-def modify_success_message(addy, conf):
+def modify_success_message(email, userconf):
     "Respond to successful Nym modification request."
     payload  = "Nym Modification Successful\n"
     payload += strutils.underline('-', payload)
-    payload += "You have successfully modified you pseudonym " + addy + ".\n\n"
+    payload += "You have successfully modified you pseudonym " + email + ".\n\n"
     payload += "After modification, the options configured on your nym are:-\n"
-    for key in conf:
-        payload += key + ': ' + str(conf[key]) + '\n'
+    useropts = ['fingerprint', 'symmetric', 'hsub']
+    for key in useropts:
+        payload += '%s: %s\n' % (key, userconf[key])
     return payload
 
 def duplicate_message(fingerprint, addy):
@@ -249,11 +251,10 @@ def post_message(payload, conf):
     ihave.send(mid, headers + '\n' +enc_payload)
 
 def user_update(text):
-    """Update a user's config paramters from a text body. The current list of
-    options is read from confdict and updated with those in the text.  To use
-    this function, confdict must already be populated using user_read."""
-    # version is locked because people send PGP keys in Modify requests and
-    # the Version header in the data is treated as a config option.
+    """Parse a block of text for lines in the format Key: Option.
+    Compare these with a list of valid fields and then construct a dictionary
+    of these options for return."""
+    # Valid fields are those that are deemed user-definable.
     valid_fields = ['symmetric', 'hsub']
     confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
@@ -302,7 +303,7 @@ def msgparse(message):
         error_report(501, 'No recipient specified.')
     logging.info('Processing received email message for: ' + options.recipient)
     recipient_addy, recipient_domain = split_email_domain(options.recipient)
-    if recipient_domain <> NYMDOMAIN:
+    if recipient_domain not in HOSTEDDOMAINS:
         logmessage =  'Message is for an invalid domain: '
         logmessage += recipient_domain
         error_report(501, logmessage)
@@ -321,7 +322,7 @@ def msgparse(message):
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
-    if recipient_addy == 'config':
+    if options.recipient.startswith('config@'):
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to config address.')
         # If it's a key then this can only be a new Nym request.
@@ -338,18 +339,18 @@ def msgparse(message):
             # Split out the address and domain components of the email address
             key_addy, key_domain = split_email_domain(key_email)
             # Simple check to ensure the key is in the right domain.
-            if key_domain <> NYMDOMAIN:
+            if key_domain not in HOSTEDDOMAINS:
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
-                error_report(301, 'Wrong domain on ' + key_email + '.')
+                error_report(301, 'Invalid domain on ' + key_email + '.')
             # Simple check to ensure the nym isn't on the reserved list.
             resfile = os.path.join(ETCPATH, 'reserved_nyms')
             reserved_nyms = strutils.file2list(resfile)
             if key_addy in reserved_nyms:
                 res_message = reserved_message(fingerprint, key_email)
-                conf = {'fingerprint' : fingerprint,
-                        'hsub' : False,
-                        'symmetric' : False}
+                # In this instance there is no valid userconf shelve to read
+                # so we create a false one to satisfy post_message().
+                conf = {'fingerprint' : fingerprint}
                 post_message(res_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
@@ -357,11 +358,8 @@ def msgparse(message):
             # Check if we already have a Nym with this address.
             if key_email in nymlist:
                 dup_message = duplicate_message(fingerprint, key_email)
-                # We need to create a fake user config as this isn't a real
-                # Nym holder.
-                conf = {'fingerprint' : fingerprint,
-                        'hsub' : False,
-                        'symmetric' : False}
+                # Create a false userconf as this isn't a valid user.
+                conf = {'fingerprint' : fingerprint}
                 post_message(dup_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
@@ -381,8 +379,8 @@ def msgparse(message):
             f = open(filename, 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
             f.close()
-            logging.info('Nym ' + key_addy + ' successfully created.')
-            suc_message = create_success_message(key_addy)
+            logging.info('Nym ' + key_email + ' successfully created.')
+            suc_message = create_success_message(key_email)
             post_message(suc_message, userconf)
             userconf.close()
         # If we've received a PGP Message to our config address, it can only
@@ -394,7 +392,6 @@ def msgparse(message):
             rc, mod_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
             error_report(rc, mod_email)
             logging.debug('Modify Nym request is for ' + mod_email + '.')
-            mod_addy, mod_domain = split_email_domain(mod_email)
             userfile = os.path.join(USERPATH, mod_email + '.db')
             if os.path.exists(userfile):
                 userconf = shelve.open(userfile)
@@ -415,14 +412,14 @@ def msgparse(message):
                 userconf[key] = moddict[key]
             # Add (or update) the modified date and then close the shelve.
             userconf['modified'] = strutils.datestr()
-            suc_message = modify_success_message(mod_addy, userconf)
+            suc_message = modify_success_message(mod_email, userconf)
             post_message(suc_message, userconf)
             userconf.close()
         else:
             error_report(301, 'Not key or encrypted message.')
 
     # We also send messages for Nymholders after verifying their signature.
-    elif recipient_addy == 'send':
+    elif options.recipient.startswith('send@'):
         # For Reference:
         # foo_from = Entire freeformat header (Foo <foo@bar.org>).
         # foo_email = Correctly formatted address (foo@bar.org).
@@ -453,7 +450,6 @@ def msgparse(message):
         else:
             logging.info('No From header in payload, using signature.')
             send_msg['From'] = nym_email
-        nym_addy, nym_domain = split_email_domain(nym_email)
         userfile = os.path.join(USERPATH, nym_email + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
@@ -497,7 +493,7 @@ def msgparse(message):
         userconf.close()
 
     # Is the request for a URL retrieval?
-    elif recipient_addy == 'url':
+    elif options.recipient.startswith('url@'):
         logging.debug('Received message requesting a URL.')
         # Attempt to decrypt the message
         rc, content = gnupg.decrypt(message, PASSPHRASE)
@@ -619,8 +615,8 @@ def msgparse(message):
         if not options.recipient in nymlist:
             error_report(301, 'No public key for ' + options.recipient + '.')
         logmessage  = "Message is inbound from " + msg['From']
-        logmessage += " to " + recipient_addy + "."
-        logging.debug(logmessage)
+        logmessage += " to " + options.recipient + "."
+        logging.info(logmessage)
         if msg.is_multipart():
             logging.debug("Message is a Multipart MIME.")
         message = msg.as_string()
