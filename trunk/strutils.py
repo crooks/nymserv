@@ -36,6 +36,12 @@ def datestr():
     utcstamp = utctime.strftime("%Y%m%d")
     return utcstamp
 
+def hours_ago(hrs):
+    "Create a timestamp for x hours ago."
+    thentime = datetime.datetime.utcnow() - datetime.timedelta(hours=hrs)
+    timestamp = thentime.strftime("%Y-%m-%d %H:%M:%S")
+    return timestamp
+
 def randstr(numchars):
     """Return a string of random chars"""
     randstring = ""
@@ -45,7 +51,7 @@ def randstr(numchars):
 
 def messageid(rightpart):
     """Compile a valid Message-ID."""
-    leftpart = datetimestr() + "." + randstr(12)
+    leftpart = datetimestr() + "." + randstr(6)
     mid = '<' + leftpart + '@' + rightpart + '>'
     return mid
 
@@ -73,6 +79,7 @@ def main():
     print mid
     print underline('-', mid)
     print "Date: " + datestr()
+    print "2 Hrs ago: " + hours_ago(2)
 
 
 # Call main function.

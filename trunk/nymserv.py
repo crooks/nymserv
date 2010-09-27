@@ -685,6 +685,12 @@ def cleanup():
             for key in userconf:
                 if not key in valid_keys:
                     del userconf[key]
+            # Write the public key to a file, just in case we ever need it.
+            keyfile = os.path.join(USERPATH, nym + '.key')
+            if not os.path.isfile(keyfile):
+                f = open(keyfile, 'w')
+                f.write(gnupg.export(userconf['fingerprint']) + '\n') 
+                f.close()
             userconf.close()
             sys.stdout.write(nym + "\n")
     sys.exit(0)    
