@@ -146,7 +146,8 @@ def modify_success_message(email, userconf):
     payload += "After modification, the options configured on your nym are:-\n"
     useropts = ['fingerprint', 'symmetric', 'hsub']
     for key in useropts:
-        payload += '%s: %s\n' % (key, userconf[key])
+        if key in userconf:
+            payload += '%s: %s\n' % (key, userconf[key])
     return payload
 
 def duplicate_message(fingerprint, addy):
