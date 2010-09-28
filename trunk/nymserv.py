@@ -265,9 +265,12 @@ def user_update(text):
             # Set field to the header name and value to its content.
             field = confopt.group(1).lower()
             value = confopt.group(2)
+            if field in moddict:
+                logging.info(field + ': Duplicate field in modify request.'
+                continue
             # If we match a field:value pair, is it valid?
             if not field in valid_fields:
-                logging.info('Invalid field in modify request: ' + field)
+                logging.info(field + ': Invalid field in modify request.')
                 continue
             # None or False means set the field to False.
             if value.lower() == 'none' or value.lower() == 'false':
