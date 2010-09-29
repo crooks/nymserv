@@ -267,7 +267,7 @@ def user_update(text):
             field = confopt.group(1).lower()
             value = confopt.group(2)
             if field in moddict:
-                logging.info(field + ': Duplicate field in modify request.'
+                logging.info(field + ': Duplicate field in modify request.')
                 continue
             # If we match a field:value pair, is it valid?
             if not field in valid_fields:
@@ -412,7 +412,7 @@ def msgparse(message):
                 else:
                     logmes  = 'Inserting key %s' % key
                     logmes += ' with value %s.' % moddict[key]
-                logging.debug(logmes)
+                    logging.debug(logmes)
                 userconf[key] = moddict[key]
             # Add (or update) the modified date and then close the shelve.
             userconf['modified'] = strutils.datestr()
