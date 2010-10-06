@@ -472,8 +472,11 @@ def msgparse(message):
         if 'Message-ID' in send_msg:
             logging.debug('Using provided Message-ID')
         else:
-            logging.debug('Generating Message-ID for outbound message')
-            send_msg['Message-ID'] = strutils.messageid(NYMDOMAIN)
+            send_mid = strutils.messageid(NYMDOMAIN)
+            logmes  = 'Generating Message-ID ' + send_mid
+            logmes += ' for outbound message.'
+            logging.info(logmes)
+            send_msg['Message-ID'] = send_mid
         # If we receive a Date, use it, otherwise generate one.
         if 'Date' in send_msg:
             logging.debug('Using provided Date of ' + send_msg['Date'])
