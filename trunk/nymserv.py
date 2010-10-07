@@ -265,7 +265,7 @@ def user_update(text):
         if confopt:
             # Set field to the header name and value to its content.
             field = confopt.group(1).lower()
-            value = confopt.group(2)
+            value = confopt.group(2).rstrip()
             if field in moddict:
                 logging.info(field + ': Duplicate field in modify request.')
                 continue
