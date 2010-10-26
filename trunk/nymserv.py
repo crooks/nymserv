@@ -138,6 +138,19 @@ Modifications to your Nym will receive a confirmation message in
 alt.anonymous.messages, formatted in accordance with your request.\n"""
     return payload
 
+def delete_success_message(email):
+    "Respond to a successful Nym delete request."
+    payload  = "Nym Deletion in progress!\n"
+    payload += strutils.underline('-', payload)
+    payload += "Your nym " + email + " is now being deleted.\n"
+    payload += """
+As per your modification request, your nym is now being deleted from the
+server.  This is the last message the server will be able to encrypt to this
+key.  As part of the deletion process, the Nym configuration will also be
+deleted.  Should you decide to recreate the Nym, it will begin with a default
+configuration.  Good-Bye, it's been good!\n"""
+    return payload
+
 def modify_success_message(email, userconf):
     "Respond to successful Nym modification request."
     payload  = "Nym Modification Successful\n"
@@ -199,7 +212,7 @@ def no_url_message(url):
     return payload
 
 def email_message(sender_email, recipient_string, message):
-    """Take a sender email address and a From header-like string of
+    """Take a sender email address and a To header-like string of
     recipients.  Split out each recipient and try to email them."""
     recipients = recipient_string.split(',')
     server = smtplib.SMTP('localhost')
@@ -414,6 +427,12 @@ def msgparse(message):
                     logmes += ' with value %s.' % moddict[key]
                     logging.debug(logmes)
                 userconf[key] = moddict[key]
+            # Does the mod request include a Delete statement?
+            if 'delete' in moddict and moddict['delete']:
+                logmessage  = mod_email + ": Starting delete process "
+                logmessage += "at user request."
+                logging.info(logmessage)
+                delete_nym(mod_email, userconf)
             # Add (or update) the modified date and then close the shelve.
             userconf['modified'] = strutils.datestr()
             suc_message = modify_success_message(mod_email, userconf)
@@ -639,6 +658,32 @@ def msgparse(message):
             userconf['received'] = 1
         userconf['last_received'] = strutils.datestr()
         userconf.close()
+
+def delete_nym(email, userconf):
+    # First we make an in-memory copy of the user conf as we're about to delete
+    # the files and shelves for it.
+    memcopy = {}
+    for key in userconf:
+        memcopy[key] = userconf[key]
+    # We now have an in-memory copy so we can close the shelve adn delete it.
+    userconf.close()
+    from os import remove
+    keyfile = os.path.join(USERPATH, email + '.key')
+    userfile = os.path.join(USERPATH, email + '.db')
+    if os.path.exists(userfile):
+        logging.info('Deleting userfile: ' + userfile)
+        remove(userfile)
+    if os.path.exists(keyfile):
+        logging.info('Deleting keyfile: ' + keyfile)
+        remove(keyfile)
+    # We have to psot the delete message before we remove the key from the
+    # keyring, otherwise we can't encrypt the message!
+    del_message = delete_success_message()
+    post_message(del_message, memcopy)
+    logging.info(memcopy['fingerprint'] + ': Deleting from keyring.')
+    gnupg.delete_key(memcopy['fingerprint'])
+    logging.info('Deletion process complete.  Exiting.')
+    sys.exit(0)
 
 def error_report(rc, desc):
     # 000   Success, no message
