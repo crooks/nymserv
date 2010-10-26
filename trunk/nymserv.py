@@ -428,7 +428,7 @@ def msgparse(message):
                     logging.debug(logmes)
                 userconf[key] = moddict[key]
             # Does the mod request include a Delete statement?
-            if 'delete' in moddict and moddict['delete']:
+            if 'delete' in moddict and moddict['delete'].lower() = 'yes':
                 logmessage  = mod_email + ": Starting delete process "
                 logmessage += "at user request."
                 logging.info(logmessage)
