@@ -48,6 +48,7 @@ NYMDOMAIN = 'is-not-my.name'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
+HSUBLEN = 48
 
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
@@ -78,14 +79,20 @@ def news_headers(hsubval = False):
     mid = strutils.messageid(NYMDOMAIN)
     message  = "Path: nymserv.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
+    hsub = hsub.HSub()
     # We use an hsub if we've been passed one.
     if hsubval:
         logging.debug("Generating hSub using key: " + hsubval)
-        hash = hsub.hash(hsubval)
+        hash = hsub.hash(hsubval, HSUBLEN)
         message += "Subject: " + hash + '\n'
         logging.debug("Generated a real hSub: " + hash)
     else:
-        hash = hsub.cryptorandom(24).encode('hex')
+        # We have to half the HSUBLEN because we want the return in Hex
+        # where each byte takes 2 digits.  To be safe, fetch too much entropy
+        # and then trim it to size.
+        randbytes = int(HSUBLEN / 2 + 1)
+        hash = hsub.cryptorandom(randbytes).encode('hex')
+        hash = hash[:HSUBLEN]
         message += "Subject: " + hash + "\n"
         logging.debug("Fake hSub: " + hash)
     message += "Date: " + email.utils.formatdate() + "\n"
@@ -428,7 +435,7 @@ def msgparse(message):
                     logging.debug(logmes)
                 userconf[key] = moddict[key]
             # Does the mod request include a Delete statement?
-            if 'delete' in moddict and moddict['delete'].lower() = 'yes':
+            if 'delete' in moddict and moddict['delete'].lower() == 'yes':
                 logmessage  = mod_email + ": Starting delete process "
                 logmessage += "at user request."
                 logging.info(logmessage)
