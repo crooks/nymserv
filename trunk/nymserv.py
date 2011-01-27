@@ -79,7 +79,6 @@ def news_headers(hsubval = False):
     mid = strutils.messageid(NYMDOMAIN)
     message  = "Path: nymserv.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
-    hsub = hsub.HSub()
     # We use an hsub if we've been passed one.
     if hsubval:
         logging.debug("Generating hSub using key: " + hsubval)
@@ -759,6 +758,8 @@ def main():
     init_logging()
     global options
     (options, args) = init_parser()
+    global hsub 
+    hsub = hsub.HSub()
     if options.cleanup:
         cleanup()
     if options.list:
