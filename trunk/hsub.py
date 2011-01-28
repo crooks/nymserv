@@ -31,10 +31,11 @@ class HSub():
         ----------------------------------------"""
         # Generate a 64bit random IV if none is provided.
         if iv is None: iv = self.cryptorandom(self.ivbytelength)
-        # Trim to default length if a length isn't specified.
-        if hashlen is None: hashlen = self.trimlength
         # Concatenate our IV with a SHA256 hash of text + IV.
         hsub = iv + sha256(iv + secret).digest()
+        # Return an untrimmed hsub unless we've been instructed otherwise.
+        if hashlen is None:
+            return hsub.encode('hex')
         return hsub.encode('hex')[:hashlen]
 
     def check(self, secret, hsub):
@@ -75,7 +76,7 @@ def main():
     using the same input text."""
     hsub = HSub()
     passphrase = "Pass phrase"
-    sub = hsub.hash(passphrase, 60)
+    sub = hsub.hash(passphrase, 78)
     iv = hsub.hexiv(sub, 16)
     print "Passphrase: " + passphrase
     print "IV:   %s" % iv.encode('hex')
