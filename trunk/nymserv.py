@@ -275,7 +275,7 @@ def user_update(text):
     Compare these with a list of valid fields and then construct a dictionary
     of these options for return."""
     # Valid fields are those that are deemed user-definable.
-    valid_fields = ['symmetric', 'hsub']
+    valid_fields = ['symmetric', 'hsub', 'delete']
     confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
     moddict = {}
@@ -671,7 +671,7 @@ def delete_nym(email, userconf):
     memcopy = {}
     for key in userconf:
         memcopy[key] = userconf[key]
-    # We now have an in-memory copy so we can close the shelve adn delete it.
+    # We now have an in-memory copy so we can close the shelve and delete it.
     userconf.close()
     from os import remove
     keyfile = os.path.join(USERPATH, email + '.key')
@@ -682,7 +682,7 @@ def delete_nym(email, userconf):
     if os.path.exists(keyfile):
         logging.info('Deleting keyfile: ' + keyfile)
         remove(keyfile)
-    # We have to psot the delete message before we remove the key from the
+    # We have to post the delete message before we remove the key from the
     # keyring, otherwise we can't encrypt the message!
     del_message = delete_success_message()
     post_message(del_message, memcopy)
