@@ -524,7 +524,25 @@ def msgparse(message):
             userconf['sent'] += 1
         else:
             userconf['sent'] = 1
-        userconf['last_sent'] = strutils.datestr()
+        # Get today's date as a string
+        today = strutils.datestr()
+        if not 'last_sent' in userconf:
+            # We've never sent a message, we have now!
+            userconf['last_sent'] = today
+        elif userconf['last_sent'] <> today:
+            # If the last time we sent a message wasn't today, sent_today needs
+            # resetting.
+            logging.debug('Resetting Sent Today count to zero')
+            userconf['sent_today'] = 0
+        # Now we set last_sent to today, regardless of any conditions.
+        userconf['last_sent'] = today
+        if 'sent_today' in userconf:
+            userconf['sent_today'] += 1
+        else:
+            userconf['sent_today'] = 1
+        logmes =  '%s has sent %d' % (nym_email, userconf['sent_today'])
+        logmes += ' messages today and %d in total.' % userconf['sent']
+        logging.debug(logmes) 
         userconf.close()
 
     # Is the request for a URL retrieval?
