@@ -484,6 +484,9 @@ def msgparse(message):
             userconf = shelve.open(userfile)
         else:
             error_report(501, userfile + ': File not found.')
+	# Reject sending if block_sends is defined and true
+	if 'block_sends' in userconf and userconf['block_sends']:
+		error_report(301, nym_email + ': Sending email is blocked')
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
