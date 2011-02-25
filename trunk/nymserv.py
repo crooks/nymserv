@@ -542,7 +542,13 @@ def msgparse(message):
             userconf['sent_today'] = 1
         logmes =  '%s has sent %d' % (nym_email, userconf['sent_today'])
         logmes += ' messages today and %d in total.' % userconf['sent']
-        logging.debug(logmes) 
+        logging.debug(logmes)
+        if userconf['sent_today'] > 50:
+            userconf['block_sends'] = True
+            logmes =  '%s has exceeded daily sending allowance.' % nym_email
+            logmes += ' Sending is now disabled until manual intervention'
+            logmes += ' re-enables it.'
+            logging.warn(logmes)
         userconf.close()
 
     # Is the request for a URL retrieval?
