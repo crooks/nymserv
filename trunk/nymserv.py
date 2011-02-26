@@ -423,6 +423,13 @@ def msgparse(message):
             # user_update creates a new dict of keys that need to be created or
             # changed in the master userconf dict.
             moddict = user_update(content)
+            # Does the mod request include a Delete statement?
+            if 'delete' in moddict and moddict['delete'].lower() == 'yes':
+                logmessage  = mod_email + ": Starting delete process "
+                logmessage += "at user request."
+                logging.info(logmessage)
+                delete_nym(mod_email, userconf)
+                error_report(301, mod_email + " has been deleted.")
             for key in moddict:
                 if key in userconf:
                     logmes  = 'Changing key %s from %s' % (key, userconf[key])
@@ -433,12 +440,6 @@ def msgparse(message):
                     logmes += ' with value %s.' % moddict[key]
                     logging.debug(logmes)
                 userconf[key] = moddict[key]
-            # Does the mod request include a Delete statement?
-            if 'delete' in moddict and moddict['delete'].lower() == 'yes':
-                logmessage  = mod_email + ": Starting delete process "
-                logmessage += "at user request."
-                logging.info(logmessage)
-                delete_nym(mod_email, userconf)
             # Add (or update) the modified date and then close the shelve.
             userconf['modified'] = strutils.datestr()
             suc_message = modify_success_message(mod_email, userconf)
@@ -711,7 +712,7 @@ def delete_nym(email, userconf):
         remove(keyfile)
     # We have to post the delete message before we remove the key from the
     # keyring, otherwise we can't encrypt the message!
-    del_message = delete_success_message()
+    del_message = delete_success_message(email)
     post_message(del_message, memcopy)
     logging.info(memcopy['fingerprint'] + ': Deleting from keyring.')
     gnupg.delete_key(memcopy['fingerprint'])
