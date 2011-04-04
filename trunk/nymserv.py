@@ -281,7 +281,7 @@ def user_update(text):
     Compare these with a list of valid fields and then construct a dictionary
     of these options for return."""
     # Valid fields are those that are deemed user-definable.
-    valid_fields = ['symmetric', 'hsub', 'delete']
+    valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
     confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
     moddict = {}
