@@ -72,20 +72,25 @@ def init_parser():
                       default=False, help = "Perform some housekeeping")
     return parser.parse_args()
 
-def news_headers(hsubval = False):
+def news_headers(conf):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
     The only required info is whether to hSub the Subject.  We expect to be
     passed an hsub value if this is required, otherwise a fake is used."""
     mid = strutils.messageid(NYMDOMAIN)
     message  = "Path: nymserv.mixmin.net!not-for-mail\n"
     message += "From: Anonymous <nobody@mixmin.net>\n"
-    # We use an hsub if we've been passed one.
-    if hsubval:
-        logging.debug("Generating hSub using key: " + hsubval)
-        hash = hsub.hash(hsubval, HSUBLEN)
+    if 'hsub' in conf and conf['hsub']:
+        # We use an hsub if we've been passed one.
+        logging.debug("Generating hSub using key: " + conf['hsub'])
+        hash = hsub.hash(conf['hsub'], HSUBLEN)
         message += "Subject: " + hash + '\n'
         logging.debug("Generated a real hSub: " + hash)
+    elif 'subject' in conf and conf['subject']:
+        # We're doing a plain-text Subject.
+        message += "Subject: %s\n" % conf['subject']
+        logging.debug("Using plain-text subject: %s" % conf['subject'])
     else:
+        # We're doing a fake hsub.
         # We have to half the HSUBLEN because we want the return in Hex
         # where each byte takes 2 digits.  To be safe, fetch too much entropy
         # and then trim it to size.
@@ -237,7 +242,10 @@ def email_message(sender_email, recipient_string, message):
 
 def post_symmetric_message(payload, hash, key):
     """Symmetrically encrypt a payload and post it."""
-    mid, headers  = news_headers(hash)
+    # We need our hsub hash in a dictionary because that's what news_headers
+    # expects to receive.
+    dummy_conf = { "hsub" : hash }
+    mid, headers  = news_headers(dummy_conf)
     logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gnupg.symmetric(key, payload)
     logging.debug("Passing message to NNTP Send")
@@ -246,9 +254,7 @@ def post_symmetric_message(payload, hash, key):
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
     'conf' contains specific formatting instructions."""
-    if not 'hsub' in conf:
-        conf['hsub'] = False
-    mid, headers  = news_headers(conf['hsub'])
+    mid, headers  = news_headers(conf)
     if not 'fingerprint' in conf:
         conf.close()
         error_report(501, 'User shelve contains no fingerprint key.')
