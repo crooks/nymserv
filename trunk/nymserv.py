@@ -44,6 +44,7 @@ HOMEDIR = os.path.expanduser('~')
 LOGPATH = os.path.join(HOMEDIR, 'log')
 USERPATH = os.path.join(HOMEDIR, 'users')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
+POOLPATH = os.path.join(HOMEDIR, 'pool')
 NYMDOMAIN = 'is-not-my.name'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
@@ -274,7 +275,14 @@ def post_message(payload, conf):
     if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
-    ihave.send(mid, headers + '\n' +enc_payload)
+    # Create a filename for the pool file
+    poolfile = strutils.pool_filename()
+    fq_poolfile = os.path.join(POOLPATH, poolfile)
+    # Write the pool file
+    f = open(fq_poolfile, 'w')
+    f.write(headers)
+    f.write('\n' + enc_payload)
+    f.close()
 
 def user_update(text):
     """Parse a block of text for lines in the format Key: Option.
