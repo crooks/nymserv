@@ -28,9 +28,21 @@ from email.parser import Parser
 
 import strutils
 
+LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
+LOGPATH = os.path.join(HOMEDIR, 'log')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
+
+def init_logging():
+    loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
+                'warn': logging.WARN, 'error': logging.ERROR}
+    logfile = os.path.join(LOGPATH, 'batch-' + strutils.datestr())
+    logging.basicConfig(
+        filename=logfile,
+        level = loglevels[LOGLEVEL],
+        format = '%(asctime)s %(process)d %(levelname)s %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S')
 
 def poollist():
     return os.listdir(POOLPATH)
@@ -109,11 +121,7 @@ def pool_process():
         logging.debug('%s: Connection Closed' % host)
 
 def main():
-    logging.basicConfig(
-        stream=sys.stdout,
-        level = logging.DEBUG,
-        format = '%(asctime)s %(process)d %(levelname)s %(message)s',
-        datefmt = '%Y-%m-%d %H:%M:%S')
+    init_logging()
     pool_process()
 
 # Call main function.
