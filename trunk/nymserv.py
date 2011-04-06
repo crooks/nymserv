@@ -36,7 +36,6 @@ from optparse import OptionParser
 import gnupg
 import hsub
 import urlfetch
-import ihave
 import strutils
 
 LOGLEVEL = 'debug'
@@ -242,7 +241,8 @@ def email_message(sender_email, recipient_string, message):
     server.quit()
 
 def post_symmetric_message(payload, hash, key):
-    """Symmetrically encrypt a payload and post it."""
+    """Symmetrically encrypt a payload and post it.  This function is
+    currently only called for posting URLs"""
     # We need our hsub hash in a dictionary because that's what news_headers
     # expects to receive.
     dummy_conf = { "hsub" : hash }
@@ -250,7 +250,7 @@ def post_symmetric_message(payload, hash, key):
     logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gnupg.symmetric(key, payload)
     logging.debug("Passing message to NNTP Send")
-    ihave.send(mid, headers + '\n' + enc_payload)
+    pool_write(headers + '\n' + enc_payload)
 
 def post_message(payload, conf):
     """Take a payload and add headers to it for News posting.  The dictionary
@@ -275,13 +275,19 @@ def post_message(payload, conf):
     if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
         enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
+    pool_write(headers + '\n' + enc_payload)
+
+def pool_write(payload):
+    '''Write the received message (complete with headers) to the pool.
+    The pool filename is formatted yyyymmdd-rrrrrr, where r is a random lower
+    case letter.'''
     # Create a filename for the pool file
     poolfile = strutils.pool_filename()
     fq_poolfile = os.path.join(POOLPATH, poolfile)
     # Write the pool file
     f = open(fq_poolfile, 'w')
-    f.write(headers)
-    f.write('\n' + enc_payload)
+    f.write(payload)
+    logging.info('%s: Added to pool' % poolfile)
     f.close()
 
 def user_update(text):
