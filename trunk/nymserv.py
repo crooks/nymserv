@@ -587,7 +587,7 @@ def msgparse(message):
                 if not url in urls:
                     urls.append(url)
                 else:
-                    logger.info("Duplicate request for: " + url)
+                    logging.info("Duplicate request for: " + url)
             if line.startswith("KEY "):
                 key = line[4:].lstrip()
             if line.startswith("HSUB "):
@@ -653,7 +653,7 @@ def msgparse(message):
 
             else:
                 error_message = "Content-Type " + ct + "has no / in it"
-                logger.warn(error_message)
+                logging.warn(error_message)
                 url_part = MIMEText(error_message, 'plain')
                 url_part['Content-Description'] = url
                 url_msg.attach(url_part)
@@ -662,7 +662,7 @@ def msgparse(message):
             # We have a URL and know what type it is.
             if not type in handled_mime_types:
                 error_message = "Cannot handle " + type + "files"
-                logger.warn(error_message)
+                logging.warn(error_message)
                 url_part = MIMEText(error_message, 'plain')
             elif type == 'image':
                 # We got a URL and it appears to be an image.

@@ -2,9 +2,9 @@
 #
 # vim: tabstop=4 expandtab shiftwidth=4 noautoindent
 #
-# ihave.py - Newsserver injector
+# batch.py - Newsserver injection batch processing
 #
-# Copyright (C) 2010 Steve Crook <steve@mixmin.net>
+# Copyright (C) 2011 Steve Crook <steve@mixmin.net>
 # $Id$
 #
 # This program is free software; you can redistribute it and/or modify
@@ -68,6 +68,13 @@ def pool_process():
             logging.debug('%s: Connection established' % host)
         except:
             logging.warn('Untrapped error during connect to %s' % host)
+            continue
+    # If there are no host connections, log it and give up.
+    if len(peers) == 0:
+        logmes  = 'Aborting: All %s peer connections failed.' % len(hosts)
+        logmes += ' Check Internet connection, it might be dead.'
+        logging.warn(logmes)
+
     # Iterate through all the files in the pool
     for filename in pool_files:
         success = False # Bool set to true is any newsserver accepts the post
@@ -116,7 +123,7 @@ def pool_process():
             logging.warn('%s: Not accepted. Retaining in pool' % filename)
 
     # Finally close the connections to our peers.
-    for host in hosts:
+    for host in peers:
         peers[host].quit()
         logging.debug('%s: Connection Closed' % host)
 
