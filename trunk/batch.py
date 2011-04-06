@@ -151,7 +151,7 @@ class pool:
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    logfile = os.path.join(LOGPATH, 'test-' + strutils.datestr())
+    logfile = os.path.join(LOGPATH, 'batch-' + strutils.datestr())
     logging.basicConfig(
         filename=logfile,
         level = loglevels[LOGLEVEL],
@@ -168,9 +168,11 @@ if __name__ == "__main__":
     daemon = MyDaemon(pidfile, '/dev/null', '/dev/null', LOGPATH + '/err')
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
+            logging.info('Batch processor started in Daemon mode')
             daemon.start()
         elif 'stop' == sys.argv[1]:
             daemon.stop()
+            logging.info('Batch processor stopped')
         elif 'restart' == sys.argv[1]:
             daemon.restart()
         else:
