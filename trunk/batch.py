@@ -19,13 +19,13 @@
 
 from daemon import Daemon
 from email.parser import Parser
+from strutils import file2list
 from time import sleep
 import logging
 import nntplib
 import os
 import os.path
 import socket
-import strutils
 import sys
 
 LOGLEVEL = 'debug'
@@ -39,7 +39,7 @@ class MyDaemon(Daemon):
     def run(self):
         while True:
             rc = p.pool_process()
-            sleep(1800)
+            sleep(3600)
 
 class pool:
     def __init__(self):
@@ -47,7 +47,7 @@ class pool:
         if not os.path.isfile(hostfile):
             logging.error('%s: Peers file does not exist' % hostfile)
             sys.exit(1)
-        self.hosts = strutils.file2list(hostfile)
+        self.hosts = file2list(hostfile)
         if len(self.hosts) == 0:
             logging.error('No news peers defined.')
             sys.exit(1)
@@ -107,7 +107,8 @@ class pool:
                 mid = msg['Message-ID']
                 logging.debug('%s: Contains Message-ID: %s' % (filename, mid))
             else:
-                logging.warn('%s: Contains no Message-ID. Skipping.' % fqname)
+                logmes = '%s: Contains no Message-ID. Skipping.' % filename
+                logging.warn(logmes)
                 continue
 
             # Now we offer the message to our peers and hope at least one
@@ -151,7 +152,8 @@ class pool:
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    logfile = os.path.join(LOGPATH, 'batch-' + strutils.datestr())
+    # No dynamic logfile name as we're running as a daemon
+    logfile = os.path.join(LOGPATH, 'batch-ihave')
     logging.basicConfig(
         filename=logfile,
         level = loglevels[LOGLEVEL],
@@ -159,7 +161,6 @@ def init_logging():
         datefmt = '%Y-%m-%d %H:%M:%S')
 
 if __name__ == "__main__":
-    init_logging()
     if not os.path.isdir(PIDPATH):
         sys.stdout.write('PID directory %s does not exist\n' % PIDPATH)
         sys.exit(1)
@@ -168,6 +169,7 @@ if __name__ == "__main__":
     daemon = MyDaemon(pidfile, '/dev/null', '/dev/null', LOGPATH + '/err')
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
+            init_logging()
             logging.info('Batch processor started in Daemon mode')
             daemon.start()
         elif 'stop' == sys.argv[1]:
