@@ -28,7 +28,7 @@ import os.path
 import socket
 import sys
 
-LOGLEVEL = 'debug'
+LOGLEVEL = 'info'
 HOMEDIR = os.path.expanduser('~')
 LOGPATH = os.path.join(HOMEDIR, 'log')
 PIDPATH = os.path.join(HOMEDIR, 'run')
@@ -161,6 +161,7 @@ def init_logging():
         datefmt = '%Y-%m-%d %H:%M:%S')
 
 if __name__ == "__main__":
+    init_logging()
     if not os.path.isdir(PIDPATH):
         sys.stdout.write('PID directory %s does not exist\n' % PIDPATH)
         sys.exit(1)
@@ -169,14 +170,16 @@ if __name__ == "__main__":
     daemon = MyDaemon(pidfile, '/dev/null', '/dev/null', LOGPATH + '/err')
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
-            init_logging()
             logging.info('Batch processor started in Daemon mode')
             daemon.start()
         elif 'stop' == sys.argv[1]:
             daemon.stop()
-            logging.info('Batch processor stopped')
+            sys.stdout.write('Batch processor stopped')
         elif 'restart' == sys.argv[1]:
             daemon.restart()
+        elif 'dryrun' == sys.argv[1]:
+            # Run in console for testing
+            daemon.run()
         else:
             print "Unknown command"
             sys.exit(2)
