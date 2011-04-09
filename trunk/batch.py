@@ -82,7 +82,7 @@ class pool:
         if num_pool_files == 0:
             logging.info('No files in pool to process so no action required.')
             return 0;
-        logging.debug('Processing %s pool files' % num_pool_files)
+        logging.info('Processing %s pool files' % num_pool_files)
         peers = self.connect_peers()
 
         # If there are no host connections, log it and give up.

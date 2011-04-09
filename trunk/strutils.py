@@ -55,7 +55,7 @@ def pool_filename():
 
 def messageid(rightpart):
     """Compile a valid Message-ID."""
-    leftpart = datetimestr() + "." + randstr(6)
+    leftpart = randstr(10) + "." + randstr(6)
     mid = '<' + leftpart + '@' + rightpart + '>'
     return mid
 
