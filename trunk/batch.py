@@ -21,6 +21,7 @@ from daemon import Daemon
 from email.parser import Parser
 from strutils import file2list
 from time import sleep
+import email.utils
 import logging
 import nntplib
 import os
@@ -33,6 +34,7 @@ HOMEDIR = os.path.expanduser('~')
 LOGPATH = os.path.join(HOMEDIR, 'log')
 PIDPATH = os.path.join(HOMEDIR, 'run')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
+TMPPATH = os.path.join(HOMEDIR, 'tmp')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
 
 class MyDaemon(Daemon):
@@ -103,6 +105,24 @@ class pool:
             # We have to perform this tiresome step in order to pass the
             # Message-ID to our peers during IHAVE.
             msg = Parser().parse(f, 'headersonly')
+            f.close()
+            # For anonymity purposes, we want to create dates at injection
+            # time, not at creation time.  Otherwise there's no point in
+            # batching delivery.
+            d = email.utils.formatdate()
+            if 'Date' in msg:
+                logging.debug('Deleting Date header: %s' % msg['Date'])
+                del msg['Date']
+            logging.debug('Inserting Date header: %s' % d)
+            msg['Date'] = d
+            if 'Injection-Date' in msg:
+                logmes = 'Deleting Injection-Date header:'
+                logmes += ' %s' % msg['Injection-Date']
+                logger.debug(logmes)
+                del msg['Injection-Date']
+            logging.debug('Inserting Injection-Date header: %s' % d)
+            msg['Injection-Date'] = d
+            
             if 'Message-ID' in msg:
                 mid = msg['Message-ID']
                 logging.debug('%s: Contains Message-ID: %s' % (filename, mid))
@@ -111,12 +131,18 @@ class pool:
                 logging.warn(logmes)
                 continue
 
+            outname = os.path.join(TMPPATH, 'outfile')
+            o = open(outname, 'w')
+            logging.debug('Writing %s to posting file' % filename)
+            o.write(msg.as_string())
+            o.close()
+            o = open(outname, 'r')
             # Now we offer the message to our peers and hope at least one
             # accepts.
             for host in peers:
-                f.seek(0) # Start from the beginning of our file
+                o.seek(0) # Start from the beginning of our file
                 try:
-                    peers[host].ihave(mid, f)
+                    peers[host].ihave(mid, o)
                     success = True
                     logging.info('%s: Accepted %s' % (host, mid))
                 except nntplib.NNTPTemporaryError:
@@ -132,7 +158,7 @@ class pool:
                     message += '%s.' % sys.exc_info()[1]
                     logging.warn(message)
             # Close the file object
-            f.close()
+            o.close()
 
             # Check the success flag.  If True we can delete the file from the
             # pool.  If not, log it.
@@ -144,8 +170,13 @@ class pool:
 
         # Finally close the connections to our peers.
         for host in peers:
-            peers[host].quit()
-            logging.debug('%s: Connection Closed' % host)
+            try:
+                peers[host].quit()
+                logging.debug('%s: Connection Closed' % host)
+            except socket.error, e:
+                logmes = '%s: Cannot close connection. ' % host
+                logmes += 'Socket Error: %s' % e
+                logging.warn(logmes)
         # Processing completed normally.
         return 0;
 
@@ -174,7 +205,7 @@ if __name__ == "__main__":
             daemon.start()
         elif 'stop' == sys.argv[1]:
             daemon.stop()
-            sys.stdout.write('Batch processor stopped')
+            sys.stdout.write('Batch processor stopped\n')
         elif 'restart' == sys.argv[1]:
             daemon.restart()
         elif 'dryrun' == sys.argv[1]:
