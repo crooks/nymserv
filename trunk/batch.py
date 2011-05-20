@@ -72,9 +72,10 @@ class pool:
                 peers[host] = nntplib.NNTP(host)
                 #peers[host].set_debuglevel(2)
                 logging.debug('%s: Connection established' % host)
+            except socket.gaierror, e:
+                logging.warn('%s: Connection error: %s' % (host, e))
             except:
                 logging.warn('Untrapped error during connect to %s' % host)
-                continue
         return peers
 
     def pool_process(self):
@@ -96,7 +97,7 @@ class pool:
 
         # Iterate through all the files in the pool
         for filename in pool_files:
-             # Bool set to true is any newsserver accepts the post
+             # Bool set to true if any newsserver accepts the post
             success = False
             # Create a fully-qualified filename to avoid any confusion
             fqname = os.path.join(POOLPATH, filename)
@@ -118,7 +119,7 @@ class pool:
             if 'Injection-Date' in msg:
                 logmes = 'Deleting Injection-Date header:'
                 logmes += ' %s' % msg['Injection-Date']
-                logger.debug(logmes)
+                logging.debug(logmes)
                 del msg['Injection-Date']
             logging.debug('Inserting Injection-Date header: %s' % d)
             msg['Injection-Date'] = d
@@ -144,7 +145,7 @@ class pool:
                 try:
                     peers[host].ihave(mid, o)
                     success = True
-                    logging.info('%s: Accepted %s' % (host, mid))
+                    logging.debug('%s: Accepted %s' % (host, mid))
                 except nntplib.NNTPTemporaryError:
                     message = '%s: IHAVE returned a temporary error: ' % host
                     message += '%s.' % sys.exc_info()[1]
@@ -164,7 +165,7 @@ class pool:
             # pool.  If not, log it.
             if success:
                 os.remove(fqname)
-                logging.info('%s: Deleted from pool' % filename)
+                logging.info('%s: Posted and deleted from pool' % filename)
             else:
                 logging.warn('%s: Not accepted. Retaining in pool' % filename)
 
