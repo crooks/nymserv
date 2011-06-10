@@ -103,27 +103,32 @@ class pool:
             fqname = os.path.join(POOLPATH, filename)
             f = open(fqname, 'r')
 
-            # We have to perform this tiresome step in order to pass the
-            # Message-ID to our peers during IHAVE.
+            # We need to parse the message headers to find out what the
+            # Message-ID is.  Also, in some cases we need to rewrite headers
+            # for anonymity purposes.
             msg = Parser().parse(f, 'headersonly')
             f.close()
             # For anonymity purposes, we want to create dates at injection
             # time, not at creation time.  Otherwise there's no point in
             # batching delivery.
-            d = email.utils.formatdate()
-            if 'Date' in msg:
-                logging.debug('Deleting Date header: %s' % msg['Date'])
-                del msg['Date']
-            logging.debug('Inserting Date header: %s' % d)
-            msg['Date'] = d
-            if 'Injection-Date' in msg:
-                logmes = 'Deleting Injection-Date header:'
-                logmes += ' %s' % msg['Injection-Date']
-                logging.debug(logmes)
-                del msg['Injection-Date']
-            logging.debug('Inserting Injection-Date header: %s' % d)
-            msg['Injection-Date'] = d
-            
+            if filename.startswith('a'):
+                # Lowercase 'a' means anonymous and we need to massage some
+                # headers to prevent giving away clues.
+                d = email.utils.formatdate()
+                if 'Date' in msg:
+                    logging.debug('Deleting Date header: %s' % msg['Date'])
+                    del msg['Date']
+                logging.debug('Inserting Date header: %s' % d)
+                msg['Date'] = d
+                if 'Injection-Date' in msg:
+                    logmes = 'Deleting Injection-Date header:'
+                    logmes += ' %s' % msg['Injection-Date']
+                    logging.debug(logmes)
+                    del msg['Injection-Date']
+                logging.debug('Inserting Injection-Date header: %s' % d)
+                msg['Injection-Date'] = d
+            # Here we extract the Message-ID so we can offer it to our news
+            # peers during IHAVE.
             if 'Message-ID' in msg:
                 mid = msg['Message-ID']
                 logging.debug('%s: Contains Message-ID: %s' % (filename, mid))

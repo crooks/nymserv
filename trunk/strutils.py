@@ -49,9 +49,9 @@ def randstr(numchars):
         randstring += random.choice('abcdefghijklmnopqrstuvwxyz')
     return randstring
 
-def pool_filename():
+def pool_filename(prefix):
     """File naming format for pool files."""
-    return datetimestr() + '.' + randstr(6)
+    return str(prefix) + datetimestr() + '.' + randstr(6)
 
 def messageid(rightpart):
     """Compile a valid Message-ID."""

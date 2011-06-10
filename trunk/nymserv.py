@@ -279,10 +279,11 @@ def post_message(payload, conf):
 
 def pool_write(payload):
     '''Write the received message (complete with headers) to the pool.
-    The pool filename is formatted yyyymmdd-rrrrrr, where r is a random lower
-    case letter.'''
-    # Create a filename for the pool file
-    poolfile = strutils.pool_filename()
+    The pool filename is formatted ayyyymmdd-rrrrrr, where r is a random lower
+    case letter. The 'a' prefix indicates Anonymous and our pool processor
+    will act upon it.'''
+    # Create a filename for the pool file with an 'a' prefix.
+    poolfile = strutils.pool_filename('a')
     fq_poolfile = os.path.join(POOLPATH, poolfile)
     # Write the pool file
     f = open(fq_poolfile, 'w')
