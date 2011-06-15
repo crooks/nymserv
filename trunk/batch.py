@@ -114,6 +114,7 @@ class pool:
             if filename.startswith('a'):
                 # Lowercase 'a' means anonymous and we need to massage some
                 # headers to prevent giving away clues.
+                logging.debug('Adjusting linkable headers')
                 d = email.utils.formatdate()
                 if 'Date' in msg:
                     logging.debug('Deleting Date header: %s' % msg['Date'])

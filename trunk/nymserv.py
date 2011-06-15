@@ -425,7 +425,17 @@ def msgparse(message):
             f.close()
             logging.info('Nym ' + key_email + ' successfully created.')
             suc_message = create_success_message(key_email)
+            if 'Subject' in msg:
+                # By copying the message Subject into userconf, we return the
+                # received Subject back to the a.a.m message.
+                userconf['Subject'] = msg['Subject']
+                logmes = "Create Subject set to %s." % userconf['Subject']
+                logging.debug(logmes)
             post_message(suc_message, userconf)
+            # Set a random Subject just so we don't have to check its
+            # existence before deleting it.
+            userconf['Subject'] = 'Meow'
+            del userconf['Subject']
             userconf.close()
         # If we've received a PGP Message to our config address, it can only
         # be a signed and encrypted request to modify a Nym config.
