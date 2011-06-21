@@ -47,8 +47,18 @@ POOLPATH = os.path.join(HOMEDIR, 'pool')
 NYMDOMAIN = 'is-not-my.name'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
-PASSPHRASE = '3VnAyesMXmJEVSlXJMq2'
 HSUBLEN = 48
+
+class config():
+    def __init__(self):
+        filename = os.path.join(ETCPATH, 'passphrase')
+        passphrase = strutils.file2list(filename)
+        if len(passphrase) == 1:
+            self.passphrase = passphrase[0]
+        elif len(passphrase) == 0:
+            error_report(401, 'No GnuPG passphrase defined.')
+        else:
+            error_report(401, 'Spurious data in passphrase file.')
 
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
@@ -269,8 +279,8 @@ def post_message(payload, conf):
         logging.debug('No Symmetric encryption defined, throwing KeyID')
         throwkid = True
     logging.debug('Signing and Encrypting message for ' + recipient)
-    enc_payload = gnupg.signcrypt(recipient, SIGNKEY, PASSPHRASE, payload,
-                                  throwkid)
+    enc_payload = gnupg.signcrypt(recipient, SIGNKEY, config.passphrase,
+                                  payload, throwkid)
     # Symmetrically wrap the payload if we have a Symmetric password defined.
     if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
@@ -443,7 +453,8 @@ def msgparse(message):
             logmessage  = 'This email is a PGP Message. '
             logmessage += 'Assuming its a modify request.'
             logging.info(logmessage)
-            rc, mod_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
+            rc, mod_email, content = gnupg.verify_decrypt(body,
+                                                          config.passphrase)
             error_report(rc, mod_email)
             logging.debug('Modify Nym request is for ' + mod_email + '.')
             userfile = os.path.join(USERPATH, mod_email + '.db')
@@ -490,7 +501,7 @@ def msgparse(message):
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to send address.')
         logging.debug('Message received for forwarding.')
-        rc, nym_email, content = gnupg.verify_decrypt(body, PASSPHRASE)
+        rc, nym_email, content = gnupg.verify_decrypt(body, config.passphrase)
         error_report(rc, nym_email)
         logging.info('Verified sender is ' + nym_email)
         send_msg = email.message_from_string(content)
@@ -587,7 +598,7 @@ def msgparse(message):
     elif options.recipient.startswith('url@'):
         logging.debug('Received message requesting a URL.')
         # Attempt to decrypt the message
-        rc, content = gnupg.decrypt(message, PASSPHRASE)
+        rc, content = gnupg.decrypt(message, config.passphrase)
         # An rc of 200 indicates all is not well.
         if rc >= 200:
             error_report(rc, content)
@@ -819,6 +830,8 @@ def main():
     (options, args) = init_parser()
     global hsub 
     hsub = hsub.HSub()
+    global config
+    config = config()
     if options.cleanup:
         cleanup()
     if options.list:
