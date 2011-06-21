@@ -20,6 +20,7 @@
 import datetime
 import random
 import os.path
+import textwrap
 
 
 def datetimestr():
@@ -77,6 +78,22 @@ def file2list(filename):
                 items.append(entry)
         readlist.close()
     return items
+
+def file2text(filename, conf):
+    """Read a file a return it as a tidied string. Paragraphs in the file
+    that end with a # will be wrapped."""
+    f = open(filename, 'r')
+    s = f.read() % conf
+    f.close()
+    paras = s.split('\n\n')
+    payload = ''
+    for p in paras:
+        p = p.rstrip()
+        if p.endswith('#'):
+            payload += textwrap.fill(p[:-1], 72) + '\n\n'
+        else:
+            payload += p + '\n\n'
+    return payload.rstrip()
 
 def main():
     mid = messageid('testing.invalid')
