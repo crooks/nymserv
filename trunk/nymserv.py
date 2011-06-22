@@ -314,9 +314,10 @@ def user_update(text):
     # Valid fields are those that are deemed user-definable.
     valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
     alternatives = {'hash-subject'      :   'hsub',
-                    'subject-password'  :   'hsub'}
+                    'subject-password'  :   'hsub',
+                    'hash-key'          :   'hsub'}
     ignore_fields = ['version'] # Public keys contain "Version: "
-    confopt_re = re.compile('(\w+?):\s+(.+)')
+    confopt_re = re.compile('([\w\-]+?):\s+(.+)')
     lines = text.split('\n')
     moddict = {}
     for line in lines:
