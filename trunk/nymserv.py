@@ -132,11 +132,11 @@ def send_success_message(msg):
     payload += "The Message-ID was: " + msg['Message-ID'] + "\n"
     return payload
 
-def create_success_message(email, userconf):
+def create_success_message(userconf):
     "Respond to a successful Nym create request."
     payload  = "Congratulations!\n"
     payload += strutils.underline('-', payload)
-    payload += "You have registered the pseudonym " + email + ".\n"
+    payload += "You have registered the pseudonym %(address)s.\n" % userconf
     payload += """
 From now on, messages sent to this address will be encrypted to your key and
 signed by the Nymserver before being delivered to the newsgroup
@@ -175,11 +175,12 @@ deleted.  Should you decide to recreate the Nym, it will begin with a default
 configuration.  Good-Bye, it's been good!\n"""
     return payload
 
-def modify_success_message(email, userconf):
+def modify_success_message(userconf):
     "Respond to successful Nym modification request."
     payload  = "Nym Modification Successful\n"
     payload += strutils.underline('-', payload)
-    payload += "You have successfully modified you pseudonym " + email + ".\n\n"
+    payload += "You have successfully modified your "
+    payload += "pseudonym %(address)s.\n\n" % userconf
     payload += optstring(userconf)
     return payload
 
@@ -233,7 +234,7 @@ def no_url_message(url):
 
 def optstring(userconf):
     optstring = "The options currently configured on your Nym are:-\n\n"
-    for key in userconf:
+    for key in sorted(userconf.iterkeys()):
         optstring += '%s: %s\n' % (key, userconf[key])
     return optstring
 
@@ -454,6 +455,13 @@ def msgparse(message):
         # We're past the new Nym phase.  Everything from here is common to all
         # messages sent to config@foo.
         logging.debug('%s: Entering config modify routine.' % sigfor)
+        if not created:
+            # If we haven't done a create, the userconf isn't open yet.
+            userfile = os.path.join(USERPATH, sigfor + '.db')
+            # This is a modify process, the user file must already exist.
+            if not os.path.exists(userfile):
+                error_report(501, userfile + ": File doesn't exist.")
+            userconf = shelve.open(userfile)
         # user_update creates a new dict of keys that need to be created or
         # changed in the master userconf dict.
         moddict = user_update(body)
@@ -464,9 +472,10 @@ def msgparse(message):
             logging.info(logmessage)
             delete_nym(sigfor, userconf)
             error_report(301, mod_email + " has been deleted.")
+        modified = False
         for key in moddict:
-            # The following condition only dictates which logmessage to write.
-            # The dictionary is updated regardless.
+            # The following condition only dictates which logmessage to
+            # write.  The dictionary is updated regardless.
             if key in userconf:
                 logmes  = 'Changing key %s from %s' % (key, userconf[key])
                 logmes += ' to %s.' % moddict[key]
@@ -476,15 +485,21 @@ def msgparse(message):
                 logmes += ' with value %s.' % moddict[key]
                 logging.debug(logmes)
             userconf[key] = moddict[key]
-        # Add (or update) the modified date in the user configuration
-        userconf['modified'] = strutils.datestr()
+            modified = True
+        if modified and not created:
+            # Add (or update) the modified date in the user configuration
+            userconf['modified'] = strutils.datestr()
+        else:
+            logging.info("%s: Nothing to modify, sending status." % sigfor)
         # Everyone should have their address in the user configuration
         if not 'address' in userconf:
+            logging.debug("Adding address to userconf.")
             userconf['address'] = sigfor
         if created:
-            reply_message = create_success_message(sigfor, userconf)
+            reply_message = create_success_message(userconf)
         else:
-            reply_message = modify_success_message(sigfor, userconf)
+            reply_message = modify_success_message(userconf)
+            logging.debug("Created modify reply message")
         post_message(reply_message, userconf)
         userconf.close()
 
