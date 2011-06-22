@@ -24,7 +24,8 @@ import os.path
 
 gnupg = GnuPGInterface.GnuPG()
 HOMEDIR = os.path.expanduser('~')
-KEYRING = os.path.join(HOMEDIR, 'keyring')
+#KEYRING = os.path.join(HOMEDIR, 'keyring')
+KEYRING = os.path.join(HOMEDIR, 'testring')
 email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
 def export(keyid):
@@ -111,6 +112,11 @@ def import_key(key):
     result = proc.handles['logger'].read()
     proc.handles['logger'].close()
     keyfile.close()
+    for line in result.split("\n"):
+        # GnuPG status lines begin with "gpg: "
+        if line.startswith("gpg: "):
+            if "no valid OpenPGP data found" in line:
+                return 301, "No PGP key found during attempted import."
     # We only ever want to work on a single key so we return False if we're
     # trying to process more than one.
     # TODO By the time we realise we've got more than one, we've already
@@ -179,21 +185,37 @@ def verify_decrypt(message, passphrase):
     content = proc.handles['stdout'].read()
     proc.handles['logger'].close()
     proc.handles['stdout'].close()
-    try:
-        proc.wait()
-    except IOError:
-        return 301, 'Invalid PGP Message.', None
+    # Process GnuPG status one line at a time
+    is_encrypted = False
     lines = result.split('\n')
     for line in lines:
-        address = email_re.search(line)
-        if not address:
-            continue
-        sigfor = address.group(0)
-        if 'Good signature' in line:
-            return 001, sigfor, content
-        if 'BAD signature' in line:
-            return 301, 'Bad signature for ' + sigfor + '.', None
-    return 301, 'No signature found during verify operation.', None
+        # GnuPG status lines begin with "gpg: "
+        if line.startswith("gpg: "):
+            if "no valid OpenPGP data found" in line:
+                return 301, line, None
+            if "public key not found" in line:
+                # This condition could indicate a new request, signed with
+                # the newly created key that we don't know yet.
+                return 001, None, content
+            if "CRC error" in line:
+                return 301, line, None
+            if "encrypted with" in line:
+                is_encrypted = True
+            if "Bad signature" in line:
+                return 401, line, None
+            if "Good signature" in line:
+                # This test is harsh.  It assumes that the addresses will be
+                # on the same line as the "Good signature".  There are valid
+                # instances where this isn't True but we tell key creators to
+                # not create keys with multi-uids.
+                address = email_re.search(line)
+                if address:
+                    return 001, address.group(0), content
+    if is_encrypted:
+        # Messages is encrytped but not signed.  Probably a new Nym request.
+        return 001, None, content
+    logmsg = "GnuPG returned nothing we understand.\n%s" % result
+    return 401, logmsg, None
 
 def decrypt(message, passphrase):
     """Decrypt a PGP message and return it in plain text."""

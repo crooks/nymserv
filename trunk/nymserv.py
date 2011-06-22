@@ -41,7 +41,7 @@ import strutils
 LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
 LOGPATH = os.path.join(HOMEDIR, 'log')
-USERPATH = os.path.join(HOMEDIR, 'users')
+USERPATH = os.path.join(HOMEDIR, 'testusers')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
 NYMDOMAIN = 'is-not-my.name'
@@ -132,7 +132,7 @@ def send_success_message(msg):
     payload += "The Message-ID was: " + msg['Message-ID'] + "\n"
     return payload
 
-def create_success_message(email):
+def create_success_message(email, userconf):
     "Respond to a successful Nym create request."
     payload  = "Congratulations!\n"
     payload += strutils.underline('-', payload)
@@ -142,21 +142,24 @@ From now on, messages sent to this address will be encrypted to your key and
 signed by the Nymserver before being delivered to the newsgroup
 alt.anonymous.messages.
 
-Currently your Nym has no Symmetric encryption defined.  Without this, messages
-will be delivered to alt.anonymous.messages with the KeyID stripped from them.
-If you would like to define a Symmetric password, send a signed and encrypted
-message to config@is-not-my.name containing the following data:
-Symmetric: passphrase
+If you want to modify your Nym in the future, send a signed and encrypted
+message to config@mixnym.net.  The message should contain one instruction
+per line, in the format:
 
-Likewise, an hSub Subject can be defined using:
-Hsub: passphrase
+instruction: setting
+
+For example, to configure an hSub password of "Panda":
+
+hsub: Panda
 
 Any combination of commands can be sent in the same message.  You can also
 unset an option by setting it to 'none'.  E.g.
 Symmetric: none
 
 Modifications to your Nym will receive a confirmation message in
-alt.anonymous.messages, formatted in accordance with your request.\n"""
+alt.anonymous.messages, formatted in accordance with your request.\n\n"""
+
+    payload += optstring(userconf)
     return payload
 
 def delete_success_message(email):
@@ -177,11 +180,7 @@ def modify_success_message(email, userconf):
     payload  = "Nym Modification Successful\n"
     payload += strutils.underline('-', payload)
     payload += "You have successfully modified you pseudonym " + email + ".\n\n"
-    payload += "After modification, the options configured on your nym are:-\n"
-    useropts = ['fingerprint', 'symmetric', 'hsub']
-    for key in useropts:
-        if key in userconf:
-            payload += '%s: %s\n' % (key, userconf[key])
+    payload += optstring(userconf)
     return payload
 
 def duplicate_message(fingerprint, addy):
@@ -231,6 +230,12 @@ would prevent this response to your Nym.\n'''
 def no_url_message(url):
     payload = 'Error: Could not retrieve ' + url
     return payload
+
+def optstring(userconf):
+    optstring = "The options currently configured on your Nym are:-\n\n"
+    for key in userconf:
+        optstring += '%s: %s\n' % (key, userconf[key])
+    return optstring
 
 def email_message(sender_email, recipient_string, message):
     """Take a sender email address and a To header-like string of
@@ -307,6 +312,9 @@ def user_update(text):
     of these options for return."""
     # Valid fields are those that are deemed user-definable.
     valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
+    alternatives = {'hash-subject'      :   'hsub',
+                    'subject-password'  :   'hsub'}
+    ignore_fields = ['version'] # Public keys contain "Version: "
     confopt_re = re.compile('(\w+?):\s+(.+)')
     lines = text.split('\n')
     moddict = {}
@@ -316,12 +324,16 @@ def user_update(text):
             # Set field to the header name and value to its content.
             field = confopt.group(1).lower()
             value = confopt.group(2).rstrip()
+            # Some fields have alternative names.
+            if field in alternatives:
+                field = alternatives[field]
             if field in moddict:
                 logging.info(field + ': Duplicate field in modify request.')
                 continue
             # If we match a field:value pair, is it valid?
             if not field in valid_fields:
-                logging.info(field + ': Invalid field in modify request.')
+                if not field in ignore_fields:
+                    logging.info(field + ': Invalid field in modify request.')
                 continue
             # None or False means set the field to False.
             if value.lower() == 'none' or value.lower() == 'false':
@@ -329,20 +341,6 @@ def user_update(text):
             else:
                 moddict[field] = value
     return moddict
-
-def key_or_message(text):
-    """Identify if the payload we're processing is in plain-text, a public Key
-    or an encrypted message."""
-    if not text:
-        logging.info('Empty payload, treating as text.')
-        return 'text'
-    if '-----BEGIN PGP PUBLIC KEY BLOCK-----' in text \
-    and '-----END PGP PUBLIC KEY BLOCK-----' in text:
-        return 'key'
-    if '-----BEGIN PGP MESSAGE-----' in text \
-    and '-----END PGP MESSAGE-----' in text:
-        return 'message'
-    return 'text'
 
 def split_email_domain(address):
     "Return the two parts of an email address"
@@ -362,65 +360,83 @@ def msgparse(message):
         logmessage += recipient_domain
         error_report(501, logmessage)
 
-    # nymlist will contain a list of all the nyms currently on the server
-    rc, nymlist = gnupg.emails_to_list()
+    rc, sigfor, message = gnupg.verify_decrypt(message, config.passphrase)
+    error_report(rc, sigfor)
+    if sigfor is None:
+        logging.debug("Received unsigned/unknown valid GnuPG message.")
+    else:
+        logging.debug("Received valid GnuPG message, signed by %s." % sigfor)
+    # At this point, we have a valid, decrypted message.
 
     # Use the email library to create the msg object.
     msg = email.message_from_string(message)
     body = msg.get_payload(decode=1)
-    # Next we want to check what type of payload we're processing.
-    if msg.is_multipart():
-        kom = 'multipart'
-    else:
-        kom = key_or_message(body)
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
     if options.recipient.startswith('config@'):
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to config address.')
-        # If it's a key then this can only be a new Nym request.
-        if kom == 'key':
-            logging.info('This is a new Nym request.')
-            # Try to import the potential keyblock.
+        # At the end of the config process, this flag identifies if we created
+        # or modified a Nym.  This dictates which confirmation message to send
+        # and whether to update modified dates against the Nym.
+        created = False
+        if sigfor is None:
+            # No address (or an unknown address) in sigfor is only valid for
+            # creation messages.  The unknown situation arises if the user
+            # signs his create message.  We can't validate it yet as we don't
+            # have the key on the server's keyring.
+
+            # Read the keyring and put each address in a list.  This prevents
+            # us from holding more than one key for any address. This has to
+            # happen before we import the new key, otehrwise we can't tell if
+            # the Nym existed before the import.
+            rc, nymlist = gnupg.emails_to_list()
+
+            # We import the key to test its content and then delete it later
+            # if it's not acceptable.
             rc, fingerprint = gnupg.import_key(body)
             error_report(rc, fingerprint)
             logging.info('Imported key ' + fingerprint)
-            # If we've managed to import a key, get the email address from it.
-            rc, key_email = gnupg.get_email_from_keyid(fingerprint)
-            error_report(rc, key_email)
-            logging.info('Extracted ' + key_email + ' from ' + fingerprint)
+            # We've decrypted a message, taken it to be a new nym request and
+            # imported a key on to the keyring.  Now we can finally check out
+            # what the address on the key is.
+            rc, sigfor = gnupg.get_email_from_keyid(fingerprint)
+            error_report(rc, sigfor)
+            logging.info('Extracted ' + sigfor + ' from ' + fingerprint)
             # Split out the address and domain components of the email address
-            key_addy, key_domain = split_email_domain(key_email)
+            nym, domain = split_email_domain(sigfor)
             # Simple check to ensure the key is in the right domain.
-            if key_domain not in HOSTEDDOMAINS:
+            if domain not in HOSTEDDOMAINS:
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
-                error_report(301, 'Invalid domain on ' + key_email + '.')
+                error_report(301, 'Invalid domain on ' + sigfor + '.')
             # Simple check to ensure the nym isn't on the reserved list.
             resfile = os.path.join(ETCPATH, 'reserved_nyms')
             reserved_nyms = strutils.file2list(resfile)
-            if key_addy in reserved_nyms:
-                res_message = reserved_message(fingerprint, key_email)
+            if nym in reserved_nyms:
+                res_message = reserved_message(fingerprint, sigfor)
                 # In this instance there is no valid userconf shelve to read
                 # so we create a false one to satisfy post_message().
                 conf = {'fingerprint' : fingerprint}
                 post_message(res_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
-                error_report(301, key_addy + ' is a reserved Nym.')
-            # Check if we already have a Nym with this address.
-            if key_email in nymlist:
-                dup_message = duplicate_message(fingerprint, key_email)
+                error_report(301, nym + ' is a reserved Nym.')
+            # Check if we already hold a key matching the address on this
+            # create request.  If we do, send a duplicate request and then
+            # delete this key.
+            if sigfor in nymlist:
+                dup_message = duplicate_message(fingerprint, sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
                 post_message(dup_message, conf)
                 logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
-                error_report(301, 'Nym ' + key_addy + ' already exists.')
+                error_report(301, 'Nym ' + sigfor + ' already exists.')
             # If script execution gets here, we know we're dealing with an
             # accepted new Nym.
-            userfile = os.path.join(USERPATH, key_email + '.db')
+            userfile = os.path.join(USERPATH, sigfor + '.db')
             # This is a creation process, the user file can't already exist.
             if os.path.exists(userfile):
                 error_report(501, userfile + ': File already exists.')
@@ -429,66 +445,48 @@ def msgparse(message):
             userconf['fingerprint'] = fingerprint
             userconf['created'] = strutils.datestr()
             # Write the public key to a file, just in case we ever need it.
-            filename = os.path.join(USERPATH, key_email + '.key')
+            filename = os.path.join(USERPATH, sigfor + '.key')
             f = open(filename, 'w')
             f.write(gnupg.export(fingerprint) + '\n') 
-            f.close()
-            logging.info('Nym ' + key_email + ' successfully created.')
-            suc_message = create_success_message(key_email)
-            if 'Subject' in msg:
-                # By copying the message Subject into userconf, we return the
-                # received Subject back to the a.a.m message.
-                userconf['Subject'] = msg['Subject']
-                logmes = "Create Subject set to %s." % userconf['Subject']
-                logging.debug(logmes)
-            post_message(suc_message, userconf)
-            # Set a random Subject just so we don't have to check its
-            # existence before deleting it.
-            userconf['Subject'] = 'Meow'
-            del userconf['Subject']
-            userconf.close()
-        # If we've received a PGP Message to our config address, it can only
-        # be a signed and encrypted request to modify a Nym config.
-        elif kom == 'message':
-            logmessage  = 'This email is a PGP Message. '
-            logmessage += 'Assuming its a modify request.'
+            created = True  # Flag this as a newly created Nym
+            logging.info('Nym ' + sigfor + ' successfully created.')
+
+        # We're past the new Nym phase.  Everything from here is common to all
+        # messages sent to config@foo.
+        logging.debug('%s: Entering config modify routine.' % sigfor)
+        # user_update creates a new dict of keys that need to be created or
+        # changed in the master userconf dict.
+        moddict = user_update(body)
+        # Does the mod request include a Delete statement?
+        if 'delete' in moddict and moddict['delete'].lower() == 'yes':
+            logmessage  = sigfor + ": Starting delete process "
+            logmessage += "at user request."
             logging.info(logmessage)
-            rc, mod_email, content = gnupg.verify_decrypt(body,
-                                                          config.passphrase)
-            error_report(rc, mod_email)
-            logging.debug('Modify Nym request is for ' + mod_email + '.')
-            userfile = os.path.join(USERPATH, mod_email + '.db')
-            if os.path.exists(userfile):
-                userconf = shelve.open(userfile)
+            delete_nym(sigfor, userconf)
+            error_report(301, mod_email + " has been deleted.")
+        for key in moddict:
+            # The following condition only dictates which logmessage to write.
+            # The dictionary is updated regardless.
+            if key in userconf:
+                logmes  = 'Changing key %s from %s' % (key, userconf[key])
+                logmes += ' to %s.' % moddict[key]
+                logging.debug(logmes)
             else:
-                error_report(501, userfile + ': File not found.')
-            # user_update creates a new dict of keys that need to be created or
-            # changed in the master userconf dict.
-            moddict = user_update(content)
-            # Does the mod request include a Delete statement?
-            if 'delete' in moddict and moddict['delete'].lower() == 'yes':
-                logmessage  = mod_email + ": Starting delete process "
-                logmessage += "at user request."
-                logging.info(logmessage)
-                delete_nym(mod_email, userconf)
-                error_report(301, mod_email + " has been deleted.")
-            for key in moddict:
-                if key in userconf:
-                    logmes  = 'Changing key %s from %s' % (key, userconf[key])
-                    logmes += ' to %s.' % moddict[key]
-                    logging.debug(logmes)
-                else:
-                    logmes  = 'Inserting key %s' % key
-                    logmes += ' with value %s.' % moddict[key]
-                    logging.debug(logmes)
-                userconf[key] = moddict[key]
-            # Add (or update) the modified date and then close the shelve.
-            userconf['modified'] = strutils.datestr()
-            suc_message = modify_success_message(mod_email, userconf)
-            post_message(suc_message, userconf)
-            userconf.close()
+                logmes  = 'Inserting key %s' % key
+                logmes += ' with value %s.' % moddict[key]
+                logging.debug(logmes)
+            userconf[key] = moddict[key]
+        # Add (or update) the modified date in the user configuration
+        userconf['modified'] = strutils.datestr()
+        # Everyone should have their address in the user configuration
+        if not 'address' in userconf:
+            userconf['address'] = sigfor
+        if created:
+            reply_message = create_success_message(sigfor, userconf)
         else:
-            error_report(301, 'Not key or encrypted message.')
+            reply_message = modify_success_message(sigfor, userconf)
+        post_message(reply_message, userconf)
+        userconf.close()
 
     # We also send messages for Nymholders after verifying their signature.
     elif options.recipient.startswith('send@'):
@@ -798,23 +796,17 @@ def stdout_user(user):
 def cleanup():
     resfile = os.path.join(ETCPATH, 'reserved_nyms')
     reserved_nyms = strutils.file2list(resfile)
-    valid_keys = ['fingerprint', 'created', 'hsub', 'sent', 'last_sent',
-                  'symmetric', 'modified', 'received', 'last_received']
     rc, nymlist = gnupg.emails_to_list()
     for nym in nymlist:
         addy, domain = split_email_domain(nym)
         if addy in reserved_nyms:
             continue
         userfile = os.path.join(USERPATH, nym + '.db')
+        keyfile = os.path.join(USERPATH, nym + '.key')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
-            if not 'created' in userconf:
-                userconf['created'] = strutils.datestr()
-            for key in userconf:
-                if not key in valid_keys:
-                    del userconf[key]
-            # Write the public key to a file, just in case we ever need it.
-            keyfile = os.path.join(USERPATH, nym + '.key')
+            if not 'address' in userconf:
+                userconf['address'] = nym
             if not os.path.isfile(keyfile):
                 f = open(keyfile, 'w')
                 f.write(gnupg.export(userconf['fingerprint']) + '\n') 
