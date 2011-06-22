@@ -429,6 +429,9 @@ def msgparse(message):
             # create request.  If we do, send a duplicate request and then
             # delete this key.
             if sigfor in nymlist:
+                logmsg = "%s: Requested but already exists. " % sigfor
+                logmsg += "Sending duplicate Nym message."
+                logging.info(logmsg)
                 dup_message = duplicate_message(fingerprint, sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
