@@ -25,7 +25,6 @@ import os.path
 import sys
 import shelve
 import smtplib
-import cStringIO
 import email.utils
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -40,7 +39,7 @@ import strutils
 
 LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'log')
+LOGPATH = os.path.join(HOMEDIR, 'testlog')
 USERPATH = os.path.join(HOMEDIR, 'testusers')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
@@ -50,6 +49,8 @@ SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 HSUBLEN = 48
 
 class config():
+    """This is only used to store the GnuPG Passphrase after reading it from
+    a file.  This is better than having it sat in SVN in plain-text."""
     def __init__(self):
         filename = os.path.join(ETCPATH, 'passphrase')
         passphrase = strutils.file2list(filename)
