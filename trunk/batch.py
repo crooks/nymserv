@@ -21,6 +21,7 @@ from daemon import Daemon
 from email.parser import Parser
 from strutils import file2list
 from time import sleep
+import cStringIO
 import email.utils
 import logging
 import nntplib
@@ -138,12 +139,9 @@ class pool:
                 logging.warn(logmes)
                 continue
 
-            outname = os.path.join(TMPPATH, 'outfile')
-            o = open(outname, 'w')
-            logging.debug('Writing %s to posting file' % filename)
+            o = cStringIO.StringIO()
+            logging.debug('Attempting to post %s.' % filename)
             o.write(msg.as_string())
-            o.close()
-            o = open(outname, 'r')
             # Now we offer the message to our peers and hope at least one
             # accepts.
             for host in peers:
