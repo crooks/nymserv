@@ -318,6 +318,9 @@ def user_update(text):
                     'subject-password'  :   'hsub',
                     'hash-key'          :   'hsub'}
     ignore_fields = ['version'] # Public keys contain "Version: "
+    # We ignore the next two fields to prevent warnings about MIME content.
+    ignore_fields.append("content-type")
+    ignore_fields.append("content-disposition")
     confopt_re = re.compile('([\w\-]+?):\s+(.+)')
     lines = text.split('\n')
     moddict = {}
@@ -363,7 +366,7 @@ def msgparse(message):
         logmessage += recipient_domain
         error_report(501, logmessage)
 
-    rc, sigfor, message = gnupg.verify_decrypt(message, config.passphrase)
+    rc, sigfor, payload = gnupg.verify_decrypt(message, config.passphrase)
     error_report(rc, sigfor)
     if sigfor is None:
         logging.debug("Received unsigned/unknown valid GnuPG message.")
@@ -372,14 +375,12 @@ def msgparse(message):
     # At this point, we have a valid, decrypted message.
 
     # Use the email library to create the msg object.
-    msg = email.message_from_string(message)
-    body = msg.get_payload(decode=1)
+    # msg = email.message_from_string(message)
+    # body = msg.get_payload(decode=1)
 
     # Start of the functionality for creating new Nyms.
     # Who was this message sent to?
     if options.recipient.startswith('config@'):
-        if msg.is_multipart():
-            error_report(301, 'Multipart message sent to config address.')
         # At the end of the config process, this flag identifies if we created
         # or modified a Nym.  This dictates which confirmation message to send
         # and whether to update modified dates against the Nym.
@@ -398,7 +399,7 @@ def msgparse(message):
 
             # We import the key to test its content and then delete it later
             # if it's not acceptable.
-            rc, fingerprint = gnupg.import_key(body)
+            rc, fingerprint = gnupg.import_key(payload)
             error_report(rc, fingerprint)
             logging.info('Imported key ' + fingerprint)
             # We've decrypted a message, taken it to be a new nym request and
@@ -469,7 +470,7 @@ def msgparse(message):
             userconf = shelve.open(userfile)
         # user_update creates a new dict of keys that need to be created or
         # changed in the master userconf dict.
-        moddict = user_update(body)
+        moddict = user_update(payload)
         # Does the mod request include a Delete statement?
         if 'delete' in moddict and moddict['delete'].lower() == 'yes':
             logmessage  = sigfor + ": Starting delete process "
@@ -494,8 +495,8 @@ def msgparse(message):
         if modified and not created:
             # Add (or update) the modified date in the user configuration
             userconf['modified'] = strutils.datestr()
-        else:
-            logging.info("%s: Nothing to modify, sending status." % sigfor)
+        elif not modified and not created:
+            logging.info("%s: Nothing modified. Sending status." % sigfor)
         # Everyone should have their address in the user configuration
         if not 'address' in userconf:
             logging.debug("Adding address to userconf.")
@@ -519,7 +520,7 @@ def msgparse(message):
         if msg.is_multipart():
             error_report(301, 'Multipart message sent to send address.')
         logging.debug('Message received for forwarding.')
-        rc, nym_email, content = gnupg.verify_decrypt(body, config.passphrase)
+        rc, nym_email, content = gnupg.verify_decrypt(payload, config.passphrase)
         error_report(rc, nym_email)
         logging.info('Verified sender is ' + nym_email)
         send_msg = email.message_from_string(content)
@@ -857,3 +858,4 @@ def main():
 # Call main function.
 if (__name__ == "__main__"):
     main()
+
