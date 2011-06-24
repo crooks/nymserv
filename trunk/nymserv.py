@@ -511,37 +511,36 @@ def msgparse(message):
 
     # We also send messages for Nymholders after verifying their signature.
     elif options.recipient.startswith('send@'):
+        if sigfor is None:
+            # Reject the message if we can't verify the sender.
+            error_report(301, "Unsigned message to send@")
         # For Reference:
         # foo_from = Entire freeformat header (Foo <foo@bar.org>).
         # foo_email = Correctly formatted address (foo@bar.org).
         # foo_name = Freeform element of email address (Foo).
         # foo_addy = LHS of @ in foo_email (foo).
         # foo_domain = RHS of @ in foo_email
-        if msg.is_multipart():
-            error_report(301, 'Multipart message sent to send address.')
         logging.debug('Message received for forwarding.')
-        rc, nym_email, content = gnupg.verify_decrypt(payload, config.passphrase)
-        error_report(rc, nym_email)
-        logging.info('Verified sender is ' + nym_email)
-        send_msg = email.message_from_string(content)
+        logging.info('Verified sender is ' + sigfor)
+        send_msg = email.message_from_string(payload)
         # This section checks that the From header matches the verified
         # signature.  It's a matter for debate but currently it's enforced
         # as the From is set to the signature.
         if 'From' in send_msg:
             send_name, send_email = email.utils.parseaddr(send_msg['From'])
             del send_msg['From']
-            send_msg['From'] = email.utils.formataddr([send_name, nym_email])
-            if send_email == nym_email:
+            send_msg['From'] = email.utils.formataddr([send_name, sigfor])
+            if send_email == sigfor:
                 logging.debug('From header in payload matches signature.')
             else:
                 log_message  = 'From header says ' + send_email
-                log_message += ' but signature is for ' + nym_email
+                log_message += ' but signature is for ' + sigfor
                 log_message += '. Using signature address.'
                 logging.info(log_message)
         else:
             logging.info('No From header in payload, using signature.')
-            send_msg['From'] = nym_email
-        userfile = os.path.join(USERPATH, nym_email + '.db')
+            send_msg['From'] = sigfor
+        userfile = os.path.join(USERPATH, sigfor + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
@@ -554,7 +553,7 @@ def msgparse(message):
             send_msg['Subject'] = 'No Subject'
         # Check we actually have a recipient for the message
         if 'To' not in send_msg:
-            err_message = send_no_recipient_message(nym_email, send_msg['Subject'])
+            err_message = send_no_recipient_message(sigfor, send_msg['Subject'])
             post_message(err_message, userconf)
             userconf.close()
             error_report(301, 'No recipient specified in To header.')
@@ -578,9 +577,9 @@ def msgparse(message):
             logging.debug("Cc'd to " + send_msg['Cc'])
             recipients += ',' + send_msg['Cc']
         # email message
-        email_message(nym_email, recipients, send_msg)
+        email_message(sigfor, recipients, send_msg)
         suc_message = send_success_message(send_msg)
-        logging.info('Posting Send confirmation to ' + nym_email)
+        logging.info('Posting Send confirmation to ' + sigfor)
         post_message(suc_message, userconf)
         if 'sent' in userconf:
             userconf['sent'] += 1
@@ -602,12 +601,12 @@ def msgparse(message):
             userconf['sent_today'] += 1
         else:
             userconf['sent_today'] = 1
-        logmes =  '%s has sent %d' % (nym_email, userconf['sent_today'])
+        logmes =  '%s has sent %d' % (sigfor, userconf['sent_today'])
         logmes += ' messages today and %d in total.' % userconf['sent']
         logging.debug(logmes)
         if userconf['sent_today'] > 50:
             userconf['block_sends'] = True
-            logmes =  '%s has exceeded daily sending allowance.' % nym_email
+            logmes =  '%s has exceeded daily sending allowance.' % sigfor
             logmes += ' Sending is now disabled until manual intervention'
             logmes += ' re-enables it.'
             logging.warn(logmes)
@@ -616,12 +615,8 @@ def msgparse(message):
     # Is the request for a URL retrieval?
     elif options.recipient.startswith('url@'):
         logging.debug('Received message requesting a URL.')
-        # Attempt to decrypt the message
-        rc, content = gnupg.decrypt(message, config.passphrase)
         # An rc of 200 indicates all is not well.
-        if rc >= 200:
-            error_report(rc, content)
-        lines = content.split('\n')
+        lines = payload.split('\n')
         # These three variables store the required lines from within the
         # request.
         urls = []
