@@ -366,13 +366,36 @@ def msgparse(message):
         logmessage += recipient_domain
         error_report(501, logmessage)
 
-    rc, sigfor, payload = gnupg.verify_decrypt(message, config.passphrase)
-    error_report(rc, sigfor)
-    if sigfor is None:
-        logging.debug("Received unsigned/unknown valid GnuPG message.")
+    # In these three instances we expect to receive encrypted messages.
+    # Anything in plain text will be rejected.
+    if (options.recipient.startswith('config@') or
+        options.recipient.startswith('send@') or
+        options.recipient.startswith('url@')):
+        rc, sigfor, payload = gnupg.verify_decrypt(message, config.passphrase)
+        error_report(rc, sigfor)
+        if sigfor is None:
+            logging.debug("Received unsigned/unknown valid GnuPG message.")
+        else:
+            logging.debug("Received valid GnuPG message, signed by %s." % sigfor)
     else:
-        logging.debug("Received valid GnuPG message, signed by %s." % sigfor)
-    # At this point, we have a valid, decrypted message.
+        # At this point, we're assuming this is an inbound message to a Nym.
+        # It might be encrypted but we don't care as we're just passing on the
+        # payload to the Nym.
+        rc, nymlist = gnupg.emails_to_list()
+        if not options.recipient in nymlist:
+            error_report(301, 'No public key for ' + options.recipient + '.')
+        userfile = os.path.join(USERPATH, options.recipient + '.db')
+        if os.path.exists(userfile):
+            userconf = shelve.open(userfile)
+        else:
+            error_report(501, userfile + ': File not found.')
+        post_message(message, userconf)
+        if 'received' in userconf:
+            userconf['received'] += 1
+        else:
+            userconf['received'] = 1
+        userconf['last_received'] = strutils.datestr()
+        userconf.close()
 
     # Use the email library to create the msg object.
     # msg = email.message_from_string(message)
@@ -725,29 +748,6 @@ def msgparse(message):
         mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
         mime_msg += url_msg.as_string() + '\n'
         post_symmetric_message(mime_msg, hash, key)
-
-    # If the message has got this far, it's a message to a Nym.
-    else:
-        if not options.recipient in nymlist:
-            error_report(301, 'No public key for ' + options.recipient + '.')
-        logmessage  = "Message is inbound from " + msg['From']
-        logmessage += " to " + options.recipient + "."
-        logging.info(logmessage)
-        if msg.is_multipart():
-            logging.debug("Message is a Multipart MIME.")
-        message = msg.as_string()
-        userfile = os.path.join(USERPATH, options.recipient + '.db')
-        if os.path.exists(userfile):
-            userconf = shelve.open(userfile)
-        else:
-            error_report(501, userfile + ': File not found.')
-        post_message(message, userconf)
-        if 'received' in userconf:
-            userconf['received'] += 1
-        else:
-            userconf['received'] = 1
-        userconf['last_received'] = strutils.datestr()
-        userconf.close()
 
 def delete_nym(email, userconf):
     # First we make an in-memory copy of the user conf as we're about to delete
