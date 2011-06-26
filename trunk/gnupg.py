@@ -191,13 +191,15 @@ def verify_decrypt(message, passphrase):
     for line in lines:
         # GnuPG status lines begin with "gpg: "
         if line.startswith("gpg: "):
-            if "no valid OpenPGP data found" in line:
-                return 301, line, None
             if "public key not found" in line:
                 # This condition could indicate a new request, signed with
                 # the newly created key that we don't know yet.
                 return 001, None, content
-            if "CRC error" in line:
+            if ("CRC error" in line or
+                "no valid OpenPGP data found" in line or
+                "unexpected data" in line):
+                # These are a collection of decrypt failure messages that
+                # should result in an exit.
                 return 301, line, None
             if "encrypted with" in line:
                 is_encrypted = True

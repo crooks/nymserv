@@ -779,15 +779,15 @@ def error_report(rc, desc):
     # 000   Success, no message
     # 100   Success, debug message
     # 200   Success, info message
-    # 300   Fail, Info message
-    # 400   Fail, Warn message
-    # 500   Fail, Error message
+    # 300   Exit, Info message
+    # 400   Abort, Warn message
+    # 500   Abort, Error message
     if rc >= 100 and rc < 200:
         logging.debug(desc)
     if rc >= 200 and rc < 300:
         logging.info(desc)
     if rc >= 300 and rc < 400:
-        logging.info(desc + ' Aborting')
+        logging.info(desc + ' Exiting')
         sys.exit(rc)
     if rc >= 400 and rc < 500:
         logging.warn(desc + ' Aborting')
