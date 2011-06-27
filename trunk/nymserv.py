@@ -474,6 +474,7 @@ def msgparse(message):
             userconf = shelve.open(userfile)
             userconf['fingerprint'] = fingerprint
             userconf['created'] = strutils.datestr()
+            userconf['address'] = sigfor
             # Write the public key to a file, just in case we ever need it.
             filename = os.path.join(USERPATH, sigfor + '.key')
             f = open(filename, 'w')
