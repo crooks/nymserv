@@ -245,6 +245,7 @@ def symmetric(passphrase, payload):
     gnupg.options.meta_interactive = 0
     gnupg.passphrase = passphrase
     gnupg.options.extra_args = optlist
+    gnupg.options.extra_args.append('--no-version')
     proc = gnupg.run(['--symmetric'], create_fhs=['stdin'],
                                       attach_fhs={'stdout': temp})
     proc.handles['stdin'].write(payload)
