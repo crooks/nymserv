@@ -161,205 +161,65 @@ class gpgFunctions(GnuPG):
         proc.handles['logger'].close()
         return result
 
-def decrypt(message, passphrase):
-    """Decrypt a PGP message and return it in plain text."""
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.always_trust = 1
-    gnupg.options.homedir = KEYRING
-    gnupg.passphrase = passphrase
-    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger'])
-    proc.handles['stdin'].write(message)
-    proc.handles['stdin'].close()
-    result = proc.handles['logger'].read()
-    content = proc.handles['stdout'].read()
-    proc.handles['logger'].close()
-    proc.handles['stdout'].close()
-    return 001, content
+    def symmetric(self, passphrase, payload):
+        """Symmetric encryption seems to choke stdout when handling large
+        files.  To overcome this issue, I'm using tempfile to write the output
+        to file instead of stdout."""
+        temp = tempfile.TemporaryFile()
+        optlist = ['--cipher-algo', 'AES256']
+        self.options.armor = 1
+        self.options.meta_interactive = 0
+        self.passphrase = passphrase
+        self.options.extra_args = optlist
+        #self.options.extra_args.append('--no-version')
+        proc = self.run(['--symmetric'], create_fhs=['stdin'],
+                                         attach_fhs={'stdout': temp})
+        proc.handles['stdin'].write(payload)
+        proc.handles['stdin'].close()
+        proc.wait()
+        temp.seek(0)
+        out = temp.read()
+        temp.close()
+        return out
 
-def verify_decrypt(message, passphrase):
-    """This function is unusual in that it returns 3 variables:
-    Return Code, Result (Email if verified), Decrypted Payload."""
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.always_trust = 1
-    gnupg.options.homedir = KEYRING
-    gnupg.passphrase = passphrase
-    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger'])
-    proc.handles['stdin'].write(message)
-    proc.handles['stdin'].close()
-    result = proc.handles['logger'].read()
-    content = proc.handles['stdout'].read()
-    proc.handles['logger'].close()
-    proc.handles['stdout'].close()
-    # Process GnuPG status one line at a time
-    is_encrypted = False
-    lines = result.split('\n')
-    for line in lines:
-        # GnuPG status lines begin with "gpg: "
-        if line.startswith("gpg: "):
-            if "public key not found" in line:
-                # This condition could indicate a new request, signed with
-                # the newly created key that we don't know yet.
-                return 001, None, content
-            if ("CRC error" in line or
-                "no valid OpenPGP data found" in line or
-                "unexpected data" in line):
-                # These are a collection of decrypt failure messages that
-                # should result in an exit.
-                return 301, line, None
-            if "encrypted with" in line:
-                is_encrypted = True
-            if "Bad signature" in line:
-                return 401, line, None
-            if "Good signature" in line:
-                # This test is harsh.  It assumes that the addresses will be
-                # on the same line as the "Good signature".  There are valid
-                # instances where this isn't True but we tell key creators to
-                # not create keys with multi-uids.
-                address = email_re.search(line)
-                if address:
-                    return 001, address.group(0), content
-    if is_encrypted:
-        # Messages is encrytped but not signed.  Probably a new Nym request.
-        return 001, None, content
-    logmsg = "GnuPG returned nothing we understand.\n%s" % result
-    return 401, logmsg, None
+    def encrypt(self, recipient, payload):
+        recipients = []
+        recipients.append(recipient)
+        self.options.armor = 1
+        self.options.meta_interactive = 0
+        self.options.always_trust = 1
+        self.options.recipients = recipients
+        self.options.homedir = self.keyring
+        proc = self.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
+        proc.handles['stdin'].write(payload)
+        proc.handles['stdin'].close()
+        ciphertext = proc.handles['stdout'].read()
+        proc.handles['stdout'].close()
+        proc.wait()
+        return ciphertext
 
-def decrypt(message, passphrase):
-    """Decrypt a PGP message and return it in plain text."""
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.always_trust = 1
-    gnupg.options.homedir = KEYRING
-    gnupg.passphrase = passphrase
-    proc = gnupg.run(['--decrypt'], create_fhs=['stdin', 'stdout', 'logger'])
-    proc.handles['stdin'].write(message)
-    proc.handles['stdin'].close()
-    result = proc.handles['logger'].read()
-    content = proc.handles['stdout'].read()
-    proc.handles['logger'].close()
-    proc.handles['stdout'].close()
-    return 001, content
-
-def symmetric(passphrase, payload):
-    """Symmetric encryption seems to choke stdout when handling large files.
-    To overcome this issue, I'm using tempfile to write the output to file
-    instead of stdout."""
-    temp = tempfile.TemporaryFile()
-    optlist = ['--cipher-algo', 'AES256']
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.passphrase = passphrase
-    gnupg.options.extra_args = optlist
-    gnupg.options.extra_args.append('--no-version')
-    proc = gnupg.run(['--symmetric'], create_fhs=['stdin'],
-                                      attach_fhs={'stdout': temp})
-    proc.handles['stdin'].write(payload)
-    proc.handles['stdin'].close()
-    proc.wait()
-    temp.seek(0)
-    return temp.read()
-
-def Encrypt(recipient, payload):
-    recipients = []
-    recipients.append(recipient)
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.always_trust = 1
-    gnupg.options.recipients = recipients
-    gnupg.options.homedir = PUBRING
-    proc = gnupg.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
-    proc.handles['stdin'].write(payload)
-    proc.handles['stdin'].close()
-    ciphertext = proc.handles['stdout'].read()
-    proc.handles['stdout'].close()
-    return ciphertext
-
-def signcrypt(recipient, senderkey, passphrase, payload, throw_key = False):
-    recipients = []
-    recipients.append(recipient)
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.always_trust = 1
-    #gnupg.options.no_version = 1
-    gnupg.options.recipients = recipients
-    gnupg.options.default_key = senderkey
-    gnupg.options.homedir = KEYRING
-    gnupg.options.extra_args.append('--no-version')
-    if throw_key:
-        gnupg.options.extra_args.append('--throw-keyid')
-    gnupg.passphrase = passphrase
-    proc = gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin', 'stdout'])
-    proc.handles['stdin'].write(payload)
-    proc.handles['stdin'].close()
-    ciphertext = proc.handles['stdout'].read()
-    proc.handles['stdout'].close()
-    proc.wait()
-    return ciphertext
-
-def GenKey(name, addy, passphrase):
-    print "Generating new key %s <%s>" % (name, addy)
-    gnupg.options.armor = 1
-    gnupg.options.meta_interactive = 0
-    gnupg.options.homedir = PUBRING
-    proc = gnupg.run(['--gen-key'], create_fhs=['stdin', 'stdout', 'logger', 'status'])
-    proc.handles['stdin'].write("Key-Type: DSA\n")
-    proc.handles['stdin'].write("Key-Length: 1024\n")
-    #proc.handles['stdin'].write("%dry-run\n")
-    proc.handles['stdin'].write("Subkey-Type: ELG-E\n")
-    proc.handles['stdin'].write("Subkey-Length: 1024\n")
-    proc.handles['stdin'].write("Name-Real: %s\n" % name)
-    proc.handles['stdin'].write("Name-Email: %s\n" % addy)
-    proc.handles['stdin'].write("Expire-Date: 2y\n")
-    proc.handles['stdin'].write("Passphrase: %s\n" % passphrase)
-#    proc.handles['stdin'].write("%pubring nympub.gpg\n")
-#    proc.handles['stdin'].write("%secring nymsec.gpg\n")
-    proc.handles['stdin'].close()
-    report = proc.handles['logger'].read()
-    proc.handles['logger'].close()
-    status = proc.handles['status'].read()
-    proc.handles['status'].close()
-    #proc.wait()
-    
-    # Now we need to scan the status output and search for the line
-    # containing the KEY_CREATED output.  Messy, but it appears to be
-    # the only way to do this.
-    for line in status.split("\n"):
-        keyid_re = re.search(r'KEY_CREATED\s+(\w+)\s+(\w+)\b', line)
-        if keyid_re:
-            keyid = keyid_re.group(2)
-            break
-    return keyid
-
-def ValidateEmail(recipient):
-    """Check if the recipient is a valid email address."""
-    if re.match(r'[\w\-][\w\-\.]*@[\w\-][\w\-\.]+[a-zA-Z]{1,4}', recipient):
-        return True
-    else:
-        return False
-
-def GetKeyID(email):
-    # Try and get the Nym keyid.  If it doesn't exist then generate it.
-    existing = CheckKey(email)
-    if existing:
-        options['nym-keyid'] = existing
-    else:
-        options['nym-keyid'] = GenKey(options['nym-name'],
-                                      options['nym-email'],
-                                      options['nym-passphrase'])
-    return options
-
-def CheckKey(email):
-    """Getting the long keyid is tricky. It's the fingerprint without spaces.
-    We attempt to retreive the fingerprint. If we can, we strip the spaces out
-    and return the result. If we can't get the fingerprint, we return False."""
-    fp = Fingerprint(email)
-    if not fp:
-        return False
-    else:
-        keyid = fp.replace(' ','')
-    return keyid
+    def signcrypt(self, recipient, senderkey, passphrase, payload,
+                  throw_key = False):
+        recipients = []
+        recipients.append(recipient)
+        self.options.armor = 1
+        self.options.meta_interactive = 0
+        self.options.always_trust = 1
+        self.options.recipients = recipients
+        self.options.default_key = senderkey
+        self.options.homedir = self.keyring
+        self.options.extra_args.append('--no-version')
+        if throw_key:
+            self.options.extra_args.append('--throw-keyid')
+        self.passphrase = passphrase
+        proc = self.run(['--encrypt', '--sign'], create_fhs=['stdin',
+                                                              'stdout'])
+        proc.handles['stdin'].write(payload)
+        proc.handles['stdin'].close()
+        ciphertext = proc.handles['stdout'].read()
+        proc.handles['stdout'].close()
+        proc.wait()
+        return ciphertext
 
 class GpgStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the
@@ -585,85 +445,7 @@ class GpgStatParse():
         return gpgstat
 
 def main():
-
-    key = """\
------BEGIN PGP PUBLIC KEY BLOCK-----
-Version: GnuPG v1.4.11 (GNU/Linux)
-
-mQGiBEyfyZ8RBACP9g+p+fwuWMVU4UkbddDpR4MZHZDDO2kw4uMKn2kTFqYDxB9K
-pPLY9w/frySkTFu1hzUWaAIdyZ8KdrWZiKjSawzb4ork+1K1kTUR4KiSDSfQD+5P
-EDQ2r5iKN8yUdMeTMB8CWeSgjuUk9qlHA/Jmd4CGcyL6eWzNe6SJFy7BlwCgvpJf
-nhYbylZ7fxqrG7EgBTRc+AMD/jVX1GE9B4/l5/N0gfkbMDuFCZ2WLZ9nxQvEw5QP
-qvgMNqbIFrzoSlKaG1upeNTeYR7svDTqnPjWDWAufIPiL78ze2d73EpL2K74lkcA
-nUhNdxraT3NfyZCT+Nae6wZboBjTPhhsANnfKoZ5nJ+7PhO6GtTnVe/1EHiX6Lyb
-Vj9SA/0UZwcR6jArQtZ2wmiO+ulT7nDSBexgdKMRIflMHsr+ALWtDW6CyH7PHLoJ
-ElXEkOY24LlFS4+XGa3oE15IuY9yekFINU2oN9k4orbqS7wGch9uFEgPxBV35TK8
-x4rBcrFMdTFMIiLgDjqcKieMTGUUxMyaZODOzzistaLTNhMMvLQUb283IDxvbzdA
-bWl4bnltLm5ldD6IYAQTEQIAIAUCTJ/JnwIbAwYLCQgHAwIEFQIIAwQWAgMBAh4B
-AheAAAoJENITsGEeSffY/GMAni3yoJBGoaaWg0Qlk9pwMthUcHAyAKCfb0/tTPaV
-L/Zr8Ec7N86P/yrOnrkBDQRMn8mfAQgAx0oow1cmYAWKwXIELHI3qic4xu8d+VnU
-kbf+wzBD1+WIqlyss86akzodAmcZwliEEcuZ6FEAsM3D2yO8mY16fNIkEtDriU9P
-l6JL8AQHE0WqTvHzVRfKepOHJvqu7os02DIFR0vKfgRqmghmi4xMInZhYgonoDXH
-A18OJN+vf5XUy+2fqblRSJ15U06uOvCgVIiTD0WIsmva1LeX3dHaogVzR8jQU5KI
-yXdapRIN9tf577HvO3ORhUcEkZYjh0zFrtzU3pQeko0QrEnR/jY1YOZ9FI0OvSMd
-566OykxJYdVjr+gDz9wdtZndgRarnteF5W4/oH8eCTIw4sn2EPLKWQARAQABiQFo
-BBgRAgAJBQJMn8mfAhsuASkJENITsGEeSffYwF0gBBkBAgAGBQJMn8mfAAoJEGGQ
-l9v96w90CvMIALlmaaXq0sen/W8+un11JCjuKkEOKzo7Qnnv5OUiP58DjOI/mieJ
-TrifPNj+ZHnneU7W0awQZY6Dfmj2tI4x9nKurEVafLti4Z8r/51YtTClYeEEayny
-R8HXVfRekfEIx2BSnVrcgpZ8bMZzr7joG3/FmVYHfHmPxGKAXE7BJ1N3V+pfwilO
-JlfklcKaBGhMEaKK03Op6BsENVvWSPOhNAQSptVI8DZVyl1IHzc/ArF2Fha2rOwV
-q4dBKQgpy+K3Jye3LWKHCKzpJFsBPdHzLVwWmKrJxwzoNBWJRMh8GB2T1bCONU+t
-4wNa1wg8mNgExiOiEYQroFfbqp9w53FCZ831bgCgkKySW/gjDzFdY67822fxt9ro
-ZFwAoLEFKj0dFnheUmNDn6eW+ZFLfsqr
-=bEIl
------END PGP PUBLIC KEY BLOCK-----"""
-
-    msg = """\
------BEGIN PGP MESSAGE-----
-Version: GnuPG v1.4.11 (GNU/Linux)
-
-hQIOA6U5QbvyB67bEAf/csnvPQl07WU/bmlPEqoJL9eML9sesLi3toNfdYEtjcKZ
-rOgOURvmD6czfZ3u8kWfbBHsWoMINQ8c1dhxE5NCZoS1+ur5aZzAhaUFZj86MFph
-zGccPN3d/wifzJX8mEK008plza29dq72z9sHRBhFjiEF+I6ULrPuTxT96DlOFFxc
-aUImOLYvK87c2kHdCexalaDqPEDe9N/Lsc6aKCKF0FBTvy55ODp19X9NHozasmL+
-Y8SSbO21ZlhcHghNkr+89KU21APCrR0U5yCSGLQZeL/jxcIcfi7MwKzN3zzBhoPK
-pgVNzyOTaOliIN9eGQRCzq1PsAg3EM+uVJeu0a/1+Af/cXOSSrqwQDvjlJCLfOry
-lCCaaTIQO6xYPZvxJqB995Ds5R34nVqV6bnNkzu1Oqd2pHoagCsQZBTu7h7t6U+g
-azkN4DEDJWaLjPX9gB1uwq656qFa5fIp4KRHBMpOOkOPiAb3VCxsRlD96dMvej6z
-vHkx/a8Rg04nCv5DZuNjLNzvXql64lFE+qZ8GMWQFayORduLkzkEVkogA3mroh3r
-oOF/3hVSkpKTF9AchG7uD7NQG7V5BmS0FJWxy7ag/6v0fBxhKrY5wl4LsNZ4qd6y
-G71y90w2iLwp10/6GeqKSiDCbtCGruMhDVk+xOasb7rRXS9wbow9qu5hQmL/OioY
-ktKlAZnt/KNHTymAoSYP5n/iUtQKn+Xja+UnMWDnnaoeYITtUdOfItXSvWos+cvo
-Ceb+sRJxf9NICaKg3ajH21SCeF82jIIDUSXiVoRcgJlW2tUnwNjDMFFlQAHOHzdP
-jTGz10pe8Uat8s3sFzYRhpu7gO26GcU/96jnsMrALVWEnhpYqNq7i/2Tvwktd3PK
-kR06JJLOrLHoS9yMLXC0EHShs6+VWRru
-=wrd+
------END PGP MESSAGE----- """
-
-    signed = """\
------BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA1
-
-This is some text
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.11 (GNU/Linux)
-
-iEYEARECAAYFAk4cVlwACgkQtHGA1SKHYeffxQCePgyWMGFD+rjDkB5i8lYqjsif
-PuoAn3VS8arVWwWwASh5mGNYvoct5F5+
-=qfO4
------END PGP SIGNATURE-----"""
-
-    homedir = os.path.expanduser('~')
-    #keyring = os.path.join(HOMEDIR, 'keyring')
-    foo = GnuPG()
-    gnupg = gpgFunctions()
-    g = GpgStatParse()
-    status =  gnupg.verify(signed)
-    print status
-    print "------"
-    gpgstat = g.statparse(status)
-    for k in gpgstat:
-        print "%s: %s" % (k, gpgstat[k])
+    None
 
 # Call main function.
 if (__name__ == "__main__"):
