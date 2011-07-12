@@ -37,7 +37,7 @@ class GnupgError(Error):
         return repr(self.expr)
 
 # Superclass GnuPGInterface.GnuPG
-class gpgFunctions(GnuPG):
+class GnupgFunctions(GnuPG):
     def __init__(self, keyring = None):
         # Process our subclass __init__
         GnuPG.__init__(self)
@@ -221,9 +221,21 @@ class gpgFunctions(GnuPG):
         proc.wait()
         return ciphertext
 
-class GpgStatParse():
+class GnupgStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the
-    various GnuPG operations."""
+    various GnuPG operations. The only public function that should be called
+    is statparse which takes a single arguement: the GnuPG status output.
+    
+    Output from statparse is a dictionary object containing all the pertinent
+    information the function could aquire from the status text.
+    
+    Example:
+    gpg = GnupgFunctions()
+    gpgparse = GnupgStatParse()
+    status = gpg.keyinfo("228761E7")
+    keyinfo = gpgparse.statparse(status)
+    sys.stdout.write("Fingerprint: %(fingerprint)s" % keyinfo)
+    """
 
     def __init__(self):
         """Define all the regular expressions required to populate the GnuPG
@@ -445,6 +457,12 @@ class GpgStatParse():
         return gpgstat
 
 def main():
+    g = GnupgFunctions()
+    gp = GnupgStatParse()
+    status = g.keyinfo("228761E7")
+    keyinfo = gp.statparse(status)
+    print "Fingerprint: %(fingerprint)s" % keyinfo
+
     None
 
 # Call main function.
