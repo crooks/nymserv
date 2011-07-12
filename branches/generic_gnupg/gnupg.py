@@ -178,9 +178,9 @@ class gpgFunctions(GnuPG):
         proc.handles['stdin'].close()
         proc.wait()
         temp.seek(0)
-        out = temp.read()
+        ciphertext = temp.read()
         temp.close()
-        return out
+        return ciphertext
 
     def encrypt(self, recipient, payload):
         recipients = []
