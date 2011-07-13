@@ -55,6 +55,7 @@ class GnupgFunctions(GnuPG):
         self.options.meta_interactive = 0
         self.options.always_trust = 1
         self.options.homedir = self.keyring
+        self.options.extra_args.append('--with-fingerprint')
         self.passphrase = passphrase
         proc = self.run(['--decrypt'], create_fhs=['stdin',
                                                    'stdout',
@@ -459,11 +460,6 @@ class GnupgStatParse():
 def main():
     g = GnupgFunctions()
     gp = GnupgStatParse()
-    status = g.keyinfo("228761E7")
-    keyinfo = gp.statparse(status)
-    print "Fingerprint: %(fingerprint)s" % keyinfo
-
-    None
 
 # Call main function.
 if (__name__ == "__main__"):
