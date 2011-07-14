@@ -39,18 +39,23 @@ import strutils
 
 LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'testlog')
-USERPATH = os.path.join(HOMEDIR, 'testusers')
+LOGPATH = os.path.join(HOMEDIR, 'log')
+USERPATH = os.path.join(HOMEDIR, 'users')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
+KEYRING = os.path.join(HOMEDIR, 'keyring')
 NYMDOMAIN = 'mixnym.net'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 HSUBLEN = 48
 
+#gpg = gnupg.GnupgFunctions(KEYRING)
+gpg = gnupg.GnupgFunctions()
+gpgparse = gnupg.GnupgStatParse()
+
 class config():
-    """This is only used to store the GnuPG Passphrase after reading it from
-    a file.  This is better than having it sat in SVN in plain-text."""
+    """This is only used to store the GnuPG Passphrase after reading it from a
+    file.  This is better than having it sat in a repository in plain-text."""
     def __init__(self):
         filename = os.path.join(ETCPATH, 'passphrase')
         passphrase = strutils.file2list(filename)
@@ -265,7 +270,7 @@ def post_symmetric_message(payload, hash, key):
     dummy_conf = { "hsub" : hash }
     mid, headers  = news_headers(dummy_conf)
     logging.debug("Symmetric encrypting message with key: " + key)
-    enc_payload = gnupg.symmetric(key, payload)
+    enc_payload = gpg.symmetric(key, payload)
     logging.debug("Passing message to NNTP Send")
     pool_write(headers + '\n' + enc_payload)
 
@@ -286,12 +291,12 @@ def post_message(payload, conf):
         logging.debug('No Symmetric encryption defined, throwing KeyID')
         throwkid = True
     logging.debug('Signing and Encrypting message for ' + recipient)
-    enc_payload = gnupg.signcrypt(recipient, SIGNKEY, config.passphrase,
-                                  payload, throwkid)
+    enc_payload = gpg.signcrypt(recipient, SIGNKEY, config.passphrase,
+                                payload, throwkid)
     # Symmetrically wrap the payload if we have a Symmetric password defined.
     if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
-        enc_payload = gnupg.symmetric(conf['symmetric'], enc_payload)
+        enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
     pool_write(headers + '\n' + enc_payload)
 
 def pool_write(payload):
@@ -348,6 +353,16 @@ def user_update(text):
                 moddict[field] = value
     return moddict
 
+def getuidmails(uidmails):
+    """Take a list of email addresses and strip out any that aren't for our
+    domains."""
+    gooduids = []
+    for uid in uidmails:
+        foo, domain = uid.split("@", 1)
+        if domain in HOSTEDDOMAINS:
+            uidmails.append(uid)
+    return gooduids
+
 def split_email_domain(address):
     "Return the two parts of an email address"
     if not '@' in address:
@@ -358,37 +373,32 @@ def split_email_domain(address):
 def msgparse(message):
     "Parse a received email."
     if not options.recipient:
-        error_report(501, 'No recipient specified.')
+        logging.warn('No recipient specified. Aborting.')
+        sys.exit(400)
     logging.info('Processing received email message for: ' + options.recipient)
-    recipient_addy, recipient_domain = split_email_domain(options.recipient)
-    if recipient_domain not in HOSTEDDOMAINS:
-        logmessage =  'Message is for an invalid domain: '
-        logmessage += recipient_domain
-        error_report(501, logmessage)
-
-    # In these three instances we expect to receive encrypted messages.
-    # Anything in plain text will be rejected.
-    if (options.recipient.startswith('config@') or
-        options.recipient.startswith('send@') or
-        options.recipient.startswith('url@')):
-        rc, sigfor, payload = gnupg.verify_decrypt(message, config.passphrase)
-        error_report(rc, sigfor)
-        if sigfor is None:
-            logging.debug("Received unsigned/unknown valid GnuPG message.")
-        else:
-            logging.debug("Received valid GnuPG message, signed by %s." % sigfor)
-    else:
+    rname, rdomain = options.recipient.split("@", 1)
+    if rdomain not in HOSTEDDOMAINS:
+        logmes =  'Message is for an invalid domain: %s. Aborting.' % rdomain
+        logging.warn(logmes)
+        sys.exit(400)
+    # specials are instances where we expect encrypted messages that we need to
+    # process in some manner.
+    specials = ['config', 'send', 'url']
+    if rname not in specials:
         # At this point, we're assuming this is an inbound message to a Nym.
         # It might be encrypted but we don't care as we're just passing on the
         # payload to the Nym.
-        rc, nymlist = gnupg.emails_to_list()
+        nymlist = gpg.emails_to_list()
         if not options.recipient in nymlist:
-            error_report(301, 'No public key for ' + options.recipient + '.')
+            logging.info('No public key for %s.' % options.recipient)
+            sys.exit(300)
         userfile = os.path.join(USERPATH, options.recipient + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
-            error_report(501, userfile + ': File not found.')
+            # This occurs when we have a recipient, with a key on the keyring
+            # but no corresponding user DB.
+            logging.error('%s: File not found.' % userfile)
         post_message(message, userconf)
         if 'received' in userconf:
             userconf['received'] += 1
@@ -396,81 +406,158 @@ def msgparse(message):
             userconf['received'] = 1
         userconf['last_received'] = strutils.datestr()
         userconf.close()
+        sys.exit(0)
+        # That's it for inbound messages to Nyms.
 
-    # Use the email library to create the msg object.
-    # msg = email.message_from_string(message)
-    # body = msg.get_payload(decode=1)
-
-    # Start of the functionality for creating new Nyms.
-    # Who was this message sent to?
-    if options.recipient.startswith('config@'):
-        # At the end of the config process, this flag identifies if we created
-        # or modified a Nym.  This dictates which confirmation message to send
-        # and whether to update modified dates against the Nym.
+    elif rname == 'config':
+        # created is a flag that indicates if this config message is to modify
+        # an existing Nym or create a new one.  In both situations we perform
+        # the modification steps but the resulting success message for a create
+        # needs to be different.
         created = False
-        if sigfor is None:
-            # No address (or an unknown address) in sigfor is only valid for
-            # creation messages.  The unknown situation arises if the user
-            # signs his create message.  We can't validate it yet as we don't
-            # have the key on the server's keyring.
+        # This is where we handle processing for encrypted messages sent to
+        # the config address.  This is reserved for modifications to Nyms.
+        result, payload = gpg.decrypt_verify(message, config.passphrase)
+        if not payload:
+            # Simple bailout, we need some decrypted payload to continue.
+            logging.info("No decrypted payload, probably spam")
+            sys.exit(300)
+        sigstat = gpgparse.statparse(result)
+        if sigstat['goodsig']:
+            if 'uidmail' not in sigstat:
+                # No good having a signed message without an email address.
+                logmes = "No email addresses on key: %(keyid)s. " % sigstat
+                logmes += "Aborting."
+                logging.info(logmes)
+                sys.exit(300)
+            # There are uids on the gpg status, we have a signed message.
+            uids = getuidmails(gpgstat['uidmail'])
+            if len(uids) > 1:
+                # We can't handle keys with multiple emails for our domains.
+                # TODO There should be a return message to the key owner.
+                logmes = "%(keyid)s: Ambiguous key. " % sigstat
+                logmes += "Multiple uid matches."
+                logging.warn(logmes)
+                sys.exit(400)
+            elif len(uids) < 1:
+                # We need a valid email address for the nym to receive email.
+                # TODO There should be a return message to the key owner.
+                logmes = "%(keyid)s: Key contains no uids for our " % sigstat
+                logmes += "domains. Aborting."
+                logging.warn(logmes)
+                sys.exit(400)
+            else:
+                # This is what we require.  Just a single, valid uid for one of
+                # our recognized domains.
+                sigfor = uids[0] # Assign our one and only uid to sigfor.
+                logmes = "Got a key with one valid UID of: %s." % sigfor
+                logging.debug(logmes)
+                if fingerprint not in sigstat:
+                    # We should always get a fingerprint from a signed message
+                    logging.error("Signed key but without fingerprint.")
+                    sys.exit(500)
+                else:
+                    fingerprint = sigstat['fingerprint']
+        else:
+            # Decrypted a payload but it's unsigned. This could be a new Nym
+            # request.  We have to assume so for now.
+            sigfor = None
+            fingerprint = None
+            logmes = "Received unsigned/unknown valid GnuPG message. "
+            logmes += "Assuming for now that it's a new Nym request."
+            logging.info(logmes)
 
             # Read the keyring and put each address in a list.  This prevents
             # us from holding more than one key for any address. This has to
             # happen before we import the new key, otehrwise we can't tell if
             # the Nym existed before the import.
-            rc, nymlist = gnupg.emails_to_list()
+            nymlist = gpg.emails_to_list()
 
             # We import the key to test its content and then delete it later
             # if it's not acceptable.
-            rc, fingerprint = gnupg.import_key(payload)
-            error_report(rc, fingerprint)
-            logging.info('Imported key ' + fingerprint)
-            # We've decrypted a message, taken it to be a new nym request and
-            # imported a key on to the keyring.  Now we can finally check out
-            # what the address on the key is.
-            rc, sigfor = gnupg.get_email_from_keyid(fingerprint)
-            error_report(rc, sigfor)
-            logging.info('Extracted ' + sigfor + ' from ' + fingerprint)
-            # Split out the address and domain components of the email address
-            nym, domain = split_email_domain(sigfor)
-            # Simple check to ensure the key is in the right domain.
-            if domain not in HOSTEDDOMAINS:
-                logging.info('Deleting key ' + fingerprint)
-                gnupg.delete_key(fingerprint)
-                error_report(301, 'Invalid domain on ' + sigfor + '.')
+            result = gpg.import_key(payload)
+            importstat = gpgparse.statparse(result)
+            # Here we check how many keys were imported. Only one is
+            # considered valid.
+            if importstat['imported'] == 1:
+                logging.info("Imported a single key.  This is good.")
+                # Put the fingerprint into a scalar for convenience
+                fingerprint = importstat['fingerprint']
+            elif importstat['imported'] > 1:
+                logmes = "%(imported)s keys imported. " % importstat
+                logmes += "We don't allow this and will now delete them."
+                logging.warn(logmes)
+                # TODO This is easier said than done as we don't know all the
+                # imported keyids.  Need to sort this out.
+                sys.exit(400)
+            else:
+                logging.info("No keys imported. Aborting")
+                sys.exit(300)
+            # By now we know a single key was imported, but how many valid
+            # uids are on it?
+            uids = getuidmails(importstat['uidmail'])
+            if len(uids) == 1:
+                sigfor = uids[0]
+                logmes = "Imported KeyID %(keyid)s for " % importstat
+                logmes += "email address %s." % sigfor
+                logging.info(logmes)
+            elif len(uids) > 1:
+                logmes = "More than one valid uid on %(keyid)s. " % importstat
+                logmes = "We can't allow that as each key must have a single "
+                logmes = "unique identifier."
+                logging.warn(logmes)
+                gpg.delete_key(fingerprint)
+                logmes = "Deleted key %s and aborting." % fingerprint
+                logging.info(logmes)
+                sys.exit(300)
+            else:
+                logmes = "No valid uids on imported key.  Deleting and "
+                logmes += "aborting."
+                gpg.delete_key(fingerprint)
+
+            # At this stage, we have imported a valid key and verified it has
+            # a single UID for one of our domains. We know the valid address
+            # and have it in 'sigfor' and the fingerprint in 'fingerprint'.
+
             # Simple check to ensure the nym isn't on the reserved list.
             resfile = os.path.join(ETCPATH, 'reserved_nyms')
             reserved_nyms = strutils.file2list(resfile)
+            nym, domain = sigfor.split("@", 1)
             if nym in reserved_nyms:
                 res_message = reserved_message(fingerprint, sigfor)
                 # In this instance there is no valid userconf shelve to read
                 # so we create a false one to satisfy post_message().
                 conf = {'fingerprint' : fingerprint}
                 post_message(res_message, conf)
-                logging.info('Deleting key ' + fingerprint)
+                logmes = "%s is a reserved Nym. Deleting key and " % nym
+                logmes += "aborting."
+                logging.info(logmes)
                 gnupg.delete_key(fingerprint)
-                error_report(301, nym + ' is a reserved Nym.')
+                sys.exit(300)
             # Check if we already hold a key matching the address on this
             # create request.  If we do, send a duplicate request and then
             # delete this key.
             if sigfor in nymlist:
                 logmsg = "%s: Requested but already exists. " % sigfor
-                logmsg += "Sending duplicate Nym message."
+                logmsg += "Sending duplicate Nym message, then deleting the "
+                logmes += "key and aborting."
                 logging.info(logmsg)
                 dup_message = duplicate_message(fingerprint, sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
                 post_message(dup_message, conf)
-                logging.info('Deleting key ' + fingerprint)
                 gnupg.delete_key(fingerprint)
-                error_report(301, 'Nym ' + sigfor + ' already exists.')
+                sys.exit(300)
+
             # If script execution gets here, we know we're dealing with an
             # accepted new Nym.
             userfile = os.path.join(USERPATH, sigfor + '.db')
             # This is a creation process, the user file can't already exist.
             if os.path.exists(userfile):
-                error_report(501, userfile + ': File already exists.')
-            logging.info('Creating ' + userfile)
+                # This should never happen.  We can't have an accepted new Nym
+                # with an existing DB file.
+                logging.error("%s: File already exists." % userfile)
+            logging.info('Creating user config file %s' % userfile)
             userconf = shelve.open(userfile)
             userconf['fingerprint'] = fingerprint
             userconf['created'] = strutils.datestr()
@@ -478,9 +565,9 @@ def msgparse(message):
             # Write the public key to a file, just in case we ever need it.
             filename = os.path.join(USERPATH, sigfor + '.key')
             f = open(filename, 'w')
-            f.write(gnupg.export(fingerprint) + '\n') 
+            f.write(gpg.export(fingerprint) + '\n') 
             created = True  # Flag this as a newly created Nym
-            logging.info('Nym ' + sigfor + ' successfully created.')
+            logmes = "%s: Nym was successfully created" % sigfor
 
         # We're past the new Nym phase.  Everything from here is common to all
         # messages sent to config@foo.
@@ -489,9 +576,13 @@ def msgparse(message):
             # If we haven't done a create, the userconf isn't open yet.
             userfile = os.path.join(USERPATH, sigfor + '.db')
             # This is a modify process, the user file must already exist.
-            if not os.path.exists(userfile):
-                error_report(501, userfile + ": File doesn't exist.")
-            userconf = shelve.open(userfile)
+            if os.path.isfile(userfile):
+                userconf = shelve.open(userfile)
+            else:
+                # In theory this can't happen.  We can't be modifying a Nym
+                # that doesn't already have a config file.
+                logging.error("%s: File doesn't exist." % userconf)
+                sys.exit(500)
         # user_update creates a new dict of keys that need to be created or
         # changed in the master userconf dict.
         moddict = user_update(payload)
@@ -501,7 +592,8 @@ def msgparse(message):
             logmessage += "at user request."
             logging.info(logmessage)
             delete_nym(sigfor, userconf)
-            error_report(301, mod_email + " has been deleted.")
+            logging.info("%s: Nym has been deleted." % sigfor)
+            sys.exit(300)
         modified = False
         for key in moddict:
             # The following condition only dictates which logmessage to
@@ -534,7 +626,7 @@ def msgparse(message):
         userconf.close()
 
     # We also send messages for Nymholders after verifying their signature.
-    elif options.recipient.startswith('send@'):
+    elif rname == "send":
         if sigfor is None:
             # Reject the message if we can't verify the sender.
             error_report(301, "Unsigned message to send@")
@@ -569,9 +661,9 @@ def msgparse(message):
             userconf = shelve.open(userfile)
         else:
             error_report(501, userfile + ': File not found.')
-	# Reject sending if block_sends is defined and true
-	if 'block_sends' in userconf and userconf['block_sends']:
-		error_report(301, nym_email + ': Sending email is blocked')
+	    # Reject sending if block_sends is defined and true
+    	if 'block_sends' in userconf and userconf['block_sends']:
+	    	error_report(301, nym_email + ': Sending email is blocked')
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
@@ -637,7 +729,7 @@ def msgparse(message):
         userconf.close()
 
     # Is the request for a URL retrieval?
-    elif options.recipient.startswith('url@'):
+    elif rname == 'url':
         logging.debug('Received message requesting a URL.')
         # An rc of 200 indicates all is not well.
         lines = payload.split('\n')
