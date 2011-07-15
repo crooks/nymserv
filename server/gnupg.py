@@ -96,7 +96,6 @@ class GnupgFunctions(GnuPG):
         proc = self.run(['--list-keys'], args=idlist, create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
-        proc.wait()
         return result
 
     def emails_to_list(self):
@@ -219,7 +218,6 @@ class GnupgFunctions(GnuPG):
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
-        proc.wait()
         return ciphertext
 
 class GnupgStatParse():
@@ -271,7 +269,8 @@ class GnupgStatParse():
         sub_re = re.compile("sub +([^/]+)/([0-9A-F]+) ([0-9\-]+)")
         
         # Key fingerprint = 1CD9 95E1 E9CE 80D6 C885  B7EB B471 80D5 2287 61E7
-        fingerprint_re = re.compile("fingerprint.*([0-9A-F ]{40,})")
+        # Primary key fingerprint: 0123 4567 89AB CDEF
+        fingerprint_re = re.compile("fingerprint[ :=]+([0-9A-F ]{40,})")
         
         # gpg: WARNING: Using untrusted key!
         nottrusted = "gpg: WARNING: Using untrusted key!"
@@ -324,6 +323,7 @@ class GnupgStatParse():
         # All status lines begin with gpg: but we'll let the regexs take care
         # of that for us.
         lines = status.split("\n")
+        lastline = None
         gpgstat = {} # Dictionary of GPG status that we'll return
         for line in lines:
             # First we'll look for errors as there's no point populating a
@@ -352,7 +352,9 @@ class GnupgStatParse():
                 gpgstat['keyid'] = sigmade_match.group(3)
 
             fingerprint_match = self.fingerprint_re.search(line)
-            if fingerprint_match:
+            # Check for lastline prevents picking up the fingerprint for subkey
+            # instead of the primary.
+            if fingerprint_match and not lastline.startswith("sub"):
                 fp = fingerprint_match.group(1)
                 gpgstat['fingerprint'] = fp.replace(" ", "")
 
@@ -455,6 +457,9 @@ class GnupgStatParse():
             # Verify Failure
             if line.startswith(self.verifyfail):
                 gpgstat['goodsig'] = False
+            # In some instances, (like fingerprint) we need to check the
+            # previous line to get the correct match.
+            lastline = line
         return gpgstat
 
 def main():
