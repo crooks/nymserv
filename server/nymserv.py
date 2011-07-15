@@ -39,11 +39,11 @@ import strutils
 
 LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'log')
-USERPATH = os.path.join(HOMEDIR, 'users')
+LOGPATH = os.path.join(HOMEDIR, 'testlog')
+USERPATH = os.path.join(HOMEDIR, 'testusers')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
-KEYRING = os.path.join(HOMEDIR, 'keyring')
+KEYRING = os.path.join(HOMEDIR, 'testring')
 NYMDOMAIN = 'mixnym.net'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
@@ -360,8 +360,20 @@ def getuidmails(uidmails):
     for uid in uidmails:
         foo, domain = uid.split("@", 1)
         if domain in HOSTEDDOMAINS:
-            uidmails.append(uid)
+            gooduids.append(uid)
     return gooduids
+
+def getfingerprint(keyid):
+    result = gpg.keyinfo(keyid)
+    print result
+    info = gpgparse.statparse(result)
+    for k in info:
+        print "%s: %s" % (k, info[k])
+    if 'fingerprint' in info:
+        return info['fingerprint']
+    else:
+        logging.error("Unable to get fingerprint for %s. Aborting." % keyid)
+        sys.exit(500)
 
 def split_email_domain(address):
     "Return the two parts of an email address"
@@ -390,7 +402,7 @@ def msgparse(message):
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
         if not options.recipient in nymlist:
-            logging.info('No public key for %s.' % options.recipient)
+            logging.info('No public key for %s. Aborting.' % options.recipient)
             sys.exit(300)
         userfile = os.path.join(USERPATH, options.recipient + '.db')
         if os.path.exists(userfile):
@@ -423,7 +435,7 @@ def msgparse(message):
             logging.info("No decrypted payload, probably spam")
             sys.exit(300)
         sigstat = gpgparse.statparse(result)
-        if sigstat['goodsig']:
+        if 'goodsig' in sigstat and sigstat['goodsig']:
             if 'uidmail' not in sigstat:
                 # No good having a signed message without an email address.
                 logmes = "No email addresses on key: %(keyid)s. " % sigstat
@@ -431,7 +443,7 @@ def msgparse(message):
                 logging.info(logmes)
                 sys.exit(300)
             # There are uids on the gpg status, we have a signed message.
-            uids = getuidmails(gpgstat['uidmail'])
+            uids = getuidmails(sigstat['uidmail'])
             if len(uids) > 1:
                 # We can't handle keys with multiple emails for our domains.
                 # TODO There should be a return message to the key owner.
@@ -452,7 +464,7 @@ def msgparse(message):
                 sigfor = uids[0] # Assign our one and only uid to sigfor.
                 logmes = "Got a key with one valid UID of: %s." % sigfor
                 logging.debug(logmes)
-                if fingerprint not in sigstat:
+                if 'fingerprint' not in sigstat:
                     # We should always get a fingerprint from a signed message
                     logging.error("Signed key but without fingerprint.")
                     sys.exit(500)
@@ -482,7 +494,8 @@ def msgparse(message):
             if importstat['imported'] == 1:
                 logging.info("Imported a single key.  This is good.")
                 # Put the fingerprint into a scalar for convenience
-                fingerprint = importstat['fingerprint']
+                print importstat['keyid']
+                fingerprint = getfingerprint(importstat['keyid'])
             elif importstat['imported'] > 1:
                 logmes = "%(imported)s keys imported. " % importstat
                 logmes += "We don't allow this and will now delete them."
@@ -553,10 +566,11 @@ def msgparse(message):
             # accepted new Nym.
             userfile = os.path.join(USERPATH, sigfor + '.db')
             # This is a creation process, the user file can't already exist.
-            if os.path.exists(userfile):
+            if os.path.isfile(userfile):
                 # This should never happen.  We can't have an accepted new Nym
                 # with an existing DB file.
                 logging.error("%s: File already exists." % userfile)
+                sys.exit(500)
             logging.info('Creating user config file %s' % userfile)
             userconf = shelve.open(userfile)
             userconf['fingerprint'] = fingerprint
@@ -731,25 +745,35 @@ def msgparse(message):
     # Is the request for a URL retrieval?
     elif rname == 'url':
         logging.debug('Received message requesting a URL.')
-        # An rc of 200 indicates all is not well.
-        lines = payload.split('\n')
+        # This uses the decrypt_verify function, even though we're not
+        # expecting a signature. We just want the decrypted payload.
+        result, payload = gpg.decrypt_verify(message, config.passphrase)
+        if not payload:
+            # Simple bailout, we need some decrypted payload to continue.
+            logging.info("No decrypted payload, probably spam")
+            sys.exit(300)
         # These three variables store the required lines from within the
         # request.
         urls = []
         key = False
         hash = False
+        url_re = re.compile("(\w+):? +(\S+)")
         # Parse each line of the received and decrypted message.
+        lines = payload.split('\n')
         for line in lines:
-            if line.startswith("SOURCE "):
-                url = line[7:].lstrip()
-                if not url in urls:
-                    urls.append(url)
+            url_match = url_re.match(line)
+            if url_match:
+                urlopt = url_match.group(1).lower()
+                urlval = url_match.group(2)
+            if urlopt == "source" or urlopt == "url":
+                if not urlval in urls:
+                    urls.append(urlval)
                 else:
-                    logging.info("Duplicate request for: " + url)
-            if line.startswith("KEY "):
-                key = line[4:].lstrip()
-            if line.startswith("HSUB "):
-                hash = line[5:].lstrip()
+                    logging.info("Duplicate request for: " + urlval)
+            if urlopt == "key":
+                key = urlval
+            if urlopt == "hsub":
+                hash = urlval
         if len(urls) == 0:
             error_report(301, "No URL's to retrieve.")
         # We cannot proceed without a Symmetric Key.  Posting plain-text to
