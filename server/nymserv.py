@@ -49,8 +49,8 @@ HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
 HSUBLEN = 48
 
-#gpg = gnupg.GnupgFunctions(KEYRING)
-gpg = gnupg.GnupgFunctions()
+gpg = gnupg.GnupgFunctions(KEYRING)
+#gpg = gnupg.GnupgFunctions()
 gpgparse = gnupg.GnupgStatParse()
 
 class config():
@@ -618,6 +618,47 @@ def msgparse(message):
 
     # We also send messages for Nymholders after verifying their signature.
     elif rname == "send":
+        result, payload = gpg.decrypt_verify(message, config.passphrase)
+        print result
+        if not payload:
+            # Simple bailout, we need some decrypted payload to continue.
+            log(301, "No decrypted payload, probably spam")
+        sigstat = gpgparse.statparse(result)
+        if 'goodsig' in sigstat and sigstat['goodsig']:
+            if 'uidmail' not in sigstat:
+                # No good having a signed message without an email address.
+                logmes = "No email addresses on key: %(keyid)s." % sigstat
+                log(301, logmes)
+            # There are uids on the gpg status, we have a signed message.
+            uids = getuidmails(sigstat['uidmail'])
+            if len(uids) > 1:
+                # We can't handle keys with multiple emails for our domains.
+                # TODO There should be a return message to the key owner.
+                logmes = "%(keyid)s: Ambiguous key. " % sigstat
+                logmes += "Multiple uid matches."
+                log(401, logmes)
+            elif len(uids) < 1:
+                # We need a valid email address for the nym to receive email.
+                # TODO There should be a return message to the key owner.
+                logmes = "%(keyid)s: Key contains no uids for our " % sigstat
+                logmes += "domains."
+                log(401, logmes)
+            else:
+                # This is what we require.  Just a single, valid uid for one of
+                # our recognized domains.
+                sigfor = uids[0] # Assign our one and only uid to sigfor.
+                logmes = "Got a key with one valid UID of: %s." % sigfor
+                logging.debug(logmes)
+                if 'fingerprint' not in sigstat:
+                    # We should always get a fingerprint from a signed message
+                    logmes = "%(keyid)s Signed key but without " % sigstat
+                    logmes += "fingerprint. Status reported was:\n"
+                    logmes += result
+                    log(501, logmes)
+                else:
+                    fingerprint = sigstat['fingerprint']
+        else:
+            log(301, "Could not verify signature.")
         if sigfor is None:
             # Reject the message if we can't verify the sender.
             log(301, "Unsigned message to send@")
