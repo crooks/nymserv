@@ -62,9 +62,9 @@ class config():
         if len(passphrase) == 1:
             self.passphrase = passphrase[0]
         elif len(passphrase) == 0:
-            error_report(401, 'No GnuPG passphrase defined.')
+            log(401, 'No GnuPG passphrase defined.')
         else:
-            error_report(401, 'Spurious data in passphrase file.')
+            log(401, 'Spurious data in passphrase file.')
 
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
@@ -259,7 +259,7 @@ def email_message(sender_email, recipient_string, message):
         except:
             logmessage  = 'Sending email to ' + addy
             logmessage += ' failed with error %s.' % sys.exc_info()[1]
-            error_report(201, logmessage)
+            log(201, logmessage)
     server.quit()
 
 def post_symmetric_message(payload, hash, key):
@@ -280,7 +280,7 @@ def post_message(payload, conf):
     mid, headers  = news_headers(conf)
     if not 'fingerprint' in conf:
         conf.close()
-        error_report(501, 'User shelve contains no fingerprint key.')
+        log(501, 'User shelve contains no fingerprint key.')
     recipient = conf['fingerprint']
     # If Symmetric encryption is specified, we don't need to throw the
     # Keyid during Asymmetric encryption.
@@ -365,34 +365,28 @@ def getuidmails(uidmails):
 
 def getfingerprint(keyid):
     result = gpg.keyinfo(keyid)
-    print result
     info = gpgparse.statparse(result)
-    for k in info:
-        print "%s: %s" % (k, info[k])
     if 'fingerprint' in info:
         return info['fingerprint']
     else:
-        logging.error("Unable to get fingerprint for %s. Aborting." % keyid)
-        sys.exit(500)
+        log(501, "Unable to get fingerprint for %s." % keyid)
 
 def split_email_domain(address):
     "Return the two parts of an email address"
     if not '@' in address:
-        error_report(401, address + ': Address is not fully-qualified')
+        log(401, address + ': Address is not fully-qualified')
     left, right = address.split('@', 1)
     return left, right
 
 def msgparse(message):
     "Parse a received email."
     if not options.recipient:
-        logging.warn('No recipient specified. Aborting.')
-        sys.exit(400)
+        log(301, 'No recipient specified.')
     logging.info('Processing received email message for: ' + options.recipient)
     rname, rdomain = options.recipient.split("@", 1)
     if rdomain not in HOSTEDDOMAINS:
-        logmes =  'Message is for an invalid domain: %s. Aborting.' % rdomain
-        logging.warn(logmes)
-        sys.exit(400)
+        logmes =  'Message is for an invalid domain: %s.' % rdomain
+        log(401, logmes)
     # specials are instances where we expect encrypted messages that we need to
     # process in some manner.
     specials = ['config', 'send', 'url']
@@ -402,8 +396,7 @@ def msgparse(message):
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
         if not options.recipient in nymlist:
-            logging.info('No public key for %s. Aborting.' % options.recipient)
-            sys.exit(300)
+            log(301, 'No public key for %s.' % options.recipient)
         userfile = os.path.join(USERPATH, options.recipient + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
@@ -418,7 +411,7 @@ def msgparse(message):
             userconf['received'] = 1
         userconf['last_received'] = strutils.datestr()
         userconf.close()
-        sys.exit(0)
+        sys.exit(001)
         # That's it for inbound messages to Nyms.
 
     elif rname == 'config':
@@ -432,16 +425,13 @@ def msgparse(message):
         result, payload = gpg.decrypt_verify(message, config.passphrase)
         if not payload:
             # Simple bailout, we need some decrypted payload to continue.
-            logging.info("No decrypted payload, probably spam")
-            sys.exit(300)
+            log(301, "No decrypted payload, probably spam")
         sigstat = gpgparse.statparse(result)
         if 'goodsig' in sigstat and sigstat['goodsig']:
             if 'uidmail' not in sigstat:
                 # No good having a signed message without an email address.
-                logmes = "No email addresses on key: %(keyid)s. " % sigstat
-                logmes += "Aborting."
-                logging.info(logmes)
-                sys.exit(300)
+                logmes = "No email addresses on key: %(keyid)s." % sigstat
+                log(301, logmes)
             # There are uids on the gpg status, we have a signed message.
             uids = getuidmails(sigstat['uidmail'])
             if len(uids) > 1:
@@ -449,15 +439,13 @@ def msgparse(message):
                 # TODO There should be a return message to the key owner.
                 logmes = "%(keyid)s: Ambiguous key. " % sigstat
                 logmes += "Multiple uid matches."
-                logging.warn(logmes)
-                sys.exit(400)
+                log(401, logmes)
             elif len(uids) < 1:
                 # We need a valid email address for the nym to receive email.
                 # TODO There should be a return message to the key owner.
                 logmes = "%(keyid)s: Key contains no uids for our " % sigstat
-                logmes += "domains. Aborting."
-                logging.warn(logmes)
-                sys.exit(400)
+                logmes += "domains."
+                log(401, logmes)
             else:
                 # This is what we require.  Just a single, valid uid for one of
                 # our recognized domains.
@@ -466,8 +454,10 @@ def msgparse(message):
                 logging.debug(logmes)
                 if 'fingerprint' not in sigstat:
                     # We should always get a fingerprint from a signed message
-                    logging.error("Signed key but without fingerprint.")
-                    sys.exit(500)
+                    logmes = "%(keyid)s Signed key but without " % sigstat
+                    logmes += "fingerprint. Status reported was:\n"
+                    logmes += result
+                    log(501, logmes)
                 else:
                     fingerprint = sigstat['fingerprint']
         else:
@@ -494,18 +484,15 @@ def msgparse(message):
             if importstat['imported'] == 1:
                 logging.info("Imported a single key.  This is good.")
                 # Put the fingerprint into a scalar for convenience
-                print importstat['keyid']
                 fingerprint = getfingerprint(importstat['keyid'])
             elif importstat['imported'] > 1:
                 logmes = "%(imported)s keys imported. " % importstat
                 logmes += "We don't allow this and will now delete them."
-                logging.warn(logmes)
                 # TODO This is easier said than done as we don't know all the
                 # imported keyids.  Need to sort this out.
-                sys.exit(400)
+                log(401, logmes)
             else:
-                logging.info("No keys imported. Aborting")
-                sys.exit(300)
+                log(301, "No keys imported.")
             # By now we know a single key was imported, but how many valid
             # uids are on it?
             uids = getuidmails(importstat['uidmail'])
@@ -520,13 +507,11 @@ def msgparse(message):
                 logmes = "unique identifier."
                 logging.warn(logmes)
                 gpg.delete_key(fingerprint)
-                logmes = "Deleted key %s and aborting." % fingerprint
-                logging.info(logmes)
-                sys.exit(300)
+                logmes = "Deleted key %s." % fingerprint
+                log(301, logmes)
             else:
-                logmes = "No valid uids on imported key.  Deleting and "
-                logmes += "aborting."
                 gpg.delete_key(fingerprint)
+                log(301, "No valid uids on imported key.  Deleting.")
 
             # At this stage, we have imported a valid key and verified it has
             # a single UID for one of our domains. We know the valid address
@@ -542,25 +527,20 @@ def msgparse(message):
                 # so we create a false one to satisfy post_message().
                 conf = {'fingerprint' : fingerprint}
                 post_message(res_message, conf)
-                logmes = "%s is a reserved Nym. Deleting key and " % nym
-                logmes += "aborting."
-                logging.info(logmes)
                 gnupg.delete_key(fingerprint)
-                sys.exit(300)
+                log(301, "%s is a reserved Nym. Deleted key." % nym)
             # Check if we already hold a key matching the address on this
             # create request.  If we do, send a duplicate request and then
             # delete this key.
             if sigfor in nymlist:
-                logmsg = "%s: Requested but already exists. " % sigfor
-                logmsg += "Sending duplicate Nym message, then deleting the "
-                logmes += "key and aborting."
-                logging.info(logmsg)
                 dup_message = duplicate_message(fingerprint, sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
                 post_message(dup_message, conf)
                 gnupg.delete_key(fingerprint)
-                sys.exit(300)
+                logmes = "%s: Requested but already exists. " % sigfor
+                logmes += "Sent duplicate Nym message and deleted key."
+                log(301, logmes)
 
             # If script execution gets here, we know we're dealing with an
             # accepted new Nym.
@@ -569,8 +549,7 @@ def msgparse(message):
             if os.path.isfile(userfile):
                 # This should never happen.  We can't have an accepted new Nym
                 # with an existing DB file.
-                logging.error("%s: File already exists." % userfile)
-                sys.exit(500)
+                log(501, "%s: File already exists." % userfile)
             logging.info('Creating user config file %s' % userfile)
             userconf = shelve.open(userfile)
             userconf['fingerprint'] = fingerprint
@@ -595,8 +574,7 @@ def msgparse(message):
             else:
                 # In theory this can't happen.  We can't be modifying a Nym
                 # that doesn't already have a config file.
-                logging.error("%s: File doesn't exist." % userconf)
-                sys.exit(500)
+                log(501, "%s: File doesn't exist." % userconf)
         # user_update creates a new dict of keys that need to be created or
         # changed in the master userconf dict.
         moddict = user_update(payload)
@@ -606,8 +584,7 @@ def msgparse(message):
             logmessage += "at user request."
             logging.info(logmessage)
             delete_nym(sigfor, userconf)
-            logging.info("%s: Nym has been deleted." % sigfor)
-            sys.exit(300)
+            log(301, "%s: Nym has been deleted." % sigfor)
         modified = False
         for key in moddict:
             # The following condition only dictates which logmessage to
@@ -643,7 +620,7 @@ def msgparse(message):
     elif rname == "send":
         if sigfor is None:
             # Reject the message if we can't verify the sender.
-            error_report(301, "Unsigned message to send@")
+            log(301, "Unsigned message to send@")
         # For Reference:
         # foo_from = Entire freeformat header (Foo <foo@bar.org>).
         # foo_email = Correctly formatted address (foo@bar.org).
@@ -674,10 +651,10 @@ def msgparse(message):
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
-            error_report(501, userfile + ': File not found.')
+            log(501, userfile + ': File not found.')
 	    # Reject sending if block_sends is defined and true
     	if 'block_sends' in userconf and userconf['block_sends']:
-	    	error_report(301, nym_email + ': Sending email is blocked')
+	    	log(301, nym_email + ': Sending email is blocked')
         if not 'Subject' in send_msg:
             logging.debug('No Subject on message, creating a dummy.')
             send_msg['Subject'] = 'No Subject'
@@ -686,7 +663,7 @@ def msgparse(message):
             err_message = send_no_recipient_message(sigfor, send_msg['Subject'])
             post_message(err_message, userconf)
             userconf.close()
-            error_report(301, 'No recipient specified in To header.')
+            log(301, 'No recipient specified in To header.')
         # If we receive a Message-ID, use it, otherwise generate one.
         if 'Message-ID' in send_msg:
             logging.debug('Using provided Message-ID')
@@ -750,8 +727,7 @@ def msgparse(message):
         result, payload = gpg.decrypt_verify(message, config.passphrase)
         if not payload:
             # Simple bailout, we need some decrypted payload to continue.
-            logging.info("No decrypted payload, probably spam")
-            sys.exit(300)
+            log(301, "No decrypted payload, probably spam.")
         # These three variables store the required lines from within the
         # request.
         urls = []
@@ -775,11 +751,11 @@ def msgparse(message):
             if urlopt == "hsub":
                 hash = urlval
         if len(urls) == 0:
-            error_report(301, "No URL's to retrieve.")
+            log(301, "No URL's to retrieve.")
         # We cannot proceed without a Symmetric Key.  Posting plain-text to
         # a.a.m is not a good idea.
         if not key:
-            error_report(301, "No symmetric key specified.")
+            log(301, "No symmetric key specified.")
         if not hash:
             logging.debug("No hSub specified, setting to KEY.")
             hash = key
@@ -798,7 +774,7 @@ def msgparse(message):
             # plain-text error message, not the html content we were
             # expecting but didn't get.
             if rc >= 100:
-                error_report(rc, message)
+                log(rc, message)
                 url_part = MIMEText(message, 'plain')
                 url_part['Content-Description'] = url
                 url_msg.attach(url_part)
@@ -887,18 +863,18 @@ def delete_nym(email, userconf):
     # keyring, otherwise we can't encrypt the message!
     del_message = delete_success_message(email)
     post_message(del_message, memcopy)
-    logging.info(memcopy['fingerprint'] + ': Deleting from keyring.')
+    logging.info('%(fingerprint)s: Deleting from keyring.' % memcopy)
     gnupg.delete_key(memcopy['fingerprint'])
-    logging.info('Deletion process complete.  Exiting.')
-    sys.exit(0)
+    log(301, 'Deletion process complete.')
 
-def error_report(rc, desc):
-    # 000   Success, no message
-    # 100   Success, debug message
-    # 200   Success, info message
-    # 300   Exit, Info message
-    # 400   Abort, Warn message
-    # 500   Abort, Error message
+def log(rc, desc):
+    """Reporting and aborting function."""
+    # 0xx   Success, no message
+    # 1xx   Success, debug message
+    # 2xx   Success, info message
+    # 3xx   Exit, Info message
+    # 4xx   Abort, Warn message
+    # 5xx   Abort, Error message
     if rc >= 100 and rc < 200:
         logging.debug(desc)
     if rc >= 200 and rc < 300:

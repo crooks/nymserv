@@ -66,7 +66,6 @@ class GnupgFunctions(GnuPG):
         content = proc.handles['stdout'].read()
         proc.handles['logger'].close()
         proc.handles['stdout'].close()
-        proc.wait()
         return result, content
 
     def export(self, keyid):
