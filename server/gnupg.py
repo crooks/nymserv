@@ -55,7 +55,7 @@ class GnupgFunctions(GnuPG):
         self.options.meta_interactive = 0
         self.options.always_trust = 1
         self.options.homedir = self.keyring
-        self.options.extra_args.append('--with-fingerprint')
+        self.options.extra_args = ['--with-fingerprint']
         self.passphrase = passphrase
         proc = self.run(['--decrypt'], create_fhs=['stdin',
                                                    'stdout',
@@ -89,7 +89,7 @@ class GnupgFunctions(GnuPG):
         self.options.armor = 1
         self.options.meta_interactive = 0
         self.options.homedir = self.keyring
-        self.options.extra_args.append('--with-fingerprint')
+        self.options.extra_args = ['--with-fingerprint']
         idlist = []
         idlist.append(keyid)
         proc = self.run(['--list-keys'], args=idlist, create_fhs=['stdout'])
@@ -104,6 +104,7 @@ class GnupgFunctions(GnuPG):
         self.options.armor = 1
         self.options.meta_interactive = 0
         self.options.homedir = self.keyring
+        self.options.extra_args = []
         proc = self.run(['--list-keys'], create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
@@ -126,13 +127,17 @@ class GnupgFunctions(GnuPG):
         #TODO Not tested this yet.
         self.options.meta_interactive = 0
         self.options.homedir = self.keyring
+        self.options.extra_args = []
         idlist = []
         idlist.append(keyid)
         proc = self.run(['--delete-key'], args=idlist)
         proc.wait()
 
-    def import_key(self, key):
-        """Import a PGP key and if successful, return its Fingerprint"""
+    def import_key(self, key, dryrun = False):
+        """Import a PGP key and if successful, return its Fingerprint.  The
+        dry-run option on import is useless for some purposes as it doesn't
+        report the uid's on the key.  We want more than this so we have our
+        own dry-run function that imports to a tempfile."""
         keyfile = tempfile.NamedTemporaryFile()
         keyfile.write(key)
         keyfile.seek(0)
@@ -140,6 +145,11 @@ class GnupgFunctions(GnuPG):
         filelist.append(keyfile.name)
         self.options.meta_interactive = 0
         self.options.homedir = self.keyring
+        self.options.extra_args = ['--with-fingerprint']
+        if dryrun:
+            self.options.extra_args.append('--no-default-keyring')
+            self.options.extra_args.append('--keyring')
+            self.options.extra_args.append('tmpring.gpg')
         proc = self.run(['--import'], args=filelist, create_fhs=['logger'])
         result = proc.handles['logger'].read()
         proc.handles['logger'].close()
@@ -152,7 +162,7 @@ class GnupgFunctions(GnuPG):
         self.options.meta_interactive = 0
         self.options.always_trust = 1
         self.options.homedir = self.keyring
-        self.options.extra_args.append('--with-fingerprint')
+        self.options.extra_args = ['--with-fingerprint']
         proc = self.run(['--verify'], create_fhs=['stdin', 'logger'])
         proc.handles['stdin'].write(message)
         proc.handles['stdin'].close()
@@ -189,6 +199,7 @@ class GnupgFunctions(GnuPG):
         self.options.always_trust = 1
         self.options.recipients = recipients
         self.options.homedir = self.keyring
+        self.option.extra_args = []
         proc = self.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
@@ -201,14 +212,15 @@ class GnupgFunctions(GnuPG):
                   throw_key = False):
         recipients = []
         recipients.append(recipient)
+        #self.options.homedir = self.keyring
         self.options.armor = 1
         self.options.meta_interactive = 0
         self.options.always_trust = 1
         self.options.recipients = recipients
         self.options.default_key = senderkey
-        self.options.homedir = self.keyring
-        self.options.extra_args.append('--no-version')
+        self.options.extra_args = []
         if throw_key:
+            self.options.extra_args.append('--no-version')
             self.options.extra_args.append('--throw-keyid')
         self.passphrase = passphrase
         proc = self.run(['--encrypt', '--sign'], create_fhs=['stdin',
@@ -217,6 +229,7 @@ class GnupgFunctions(GnuPG):
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
+        print ciphertext
         return ciphertext
 
 class GnupgStatParse():
@@ -285,6 +298,9 @@ class GnupgStatParse():
         # gpg: key 1E49F7D8: public key "oo7 <oo7@mixnym.net>" imported
         imp = "gpg: key ([0-9A-F]+): public key \"(.*)\" imported"
         import_re = re.compile(imp)
+        #gpg: key 50343676: "Flump (Flump Nym) <flump@mixnym.net>" not changed
+        imp = "gpg: key ([0-9A-F]+): \"(.*)\" not changed"
+        import_nc_re = re.compile(imp)
 
         # gpg: verify signatures failed: unexpected data
         verifyfail = "gpg: verify signatures failed"
@@ -299,6 +315,7 @@ class GnupgStatParse():
         self.nottrusted = nottrusted
         self.imported = imported
         self.import_re = import_re
+        self.import_nc_re = import_nc_re
         self.pub_re = pub_re
         self.sub_re = sub_re
         self.fingerprint_re = fingerprint_re
@@ -438,12 +455,17 @@ class GnupgStatParse():
             if line.startswith(self.imported):
                 foo, numpro = line.split("processed: ")
                 gpgstat['imported'] = int(numpro)
-            import_match = self.import_re.match(line)
 
             # Importing keys
+            import_match = self.import_re.match(line)
+            import_nc_match = self.import_nc_re.match(line)
             if import_match:
                 gpgstat['keyid'] = import_match.group(1)
                 uid = import_match.group(2)
+            if import_nc_match:
+                gpgstat['keyid'] = import_nc_match.group(1)
+                uid = import_nc_match.group(2)
+            if import_match or import_nc_match:
                 if 'uidtext' not in gpgstat:
                     gpgstat['uidtext'] = []
                 gpgstat['uidtext'].append(uid)
@@ -462,8 +484,18 @@ class GnupgStatParse():
         return gpgstat
 
 def main():
-    g = GnupgFunctions()
+    g = GnupgFunctions("/crypt/home/nymserv/testring")
     gp = GnupgStatParse()
+    f = open("/crypt/home/nymserv/flumpkey", "r")
+    key = f.read()
+    f.close()
+    result = g.import_key(key, dryrun = True)
+    print result
+    result = g.import_key(key, dryrun = False)
+    print result
+    stat = gp.statparse(result)
+    for k in stat:
+        print "%s: %s" % (k, stat[k])
 
 # Call main function.
 if (__name__ == "__main__"):
