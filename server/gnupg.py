@@ -229,7 +229,6 @@ class GnupgFunctions(GnuPG):
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
-        print ciphertext
         return ciphertext
 
 class GnupgStatParse():
