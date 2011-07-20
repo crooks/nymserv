@@ -365,13 +365,6 @@ def getuidmails(uidmails):
             gooduids.append(uid)
     return gooduids
 
-def split_email_domain(address):
-    "Return the two parts of an email address"
-    if not '@' in address:
-        log(401, address + ': Address is not fully-qualified')
-    left, right = address.split('@', 1)
-    return left, right
-
 def msgparse(message):
     "Parse a received email."
     if not options.recipient:
@@ -995,7 +988,7 @@ def cleanup():
     reserved_nyms = strutils.file2list(resfile)
     rc, nymlist = gpg.emails_to_list()
     for nym in nymlist:
-        addy, domain = split_email_domain(nym)
+        addy, domain = nym.split("@", 1)
         if addy in reserved_nyms:
             continue
         userfile = os.path.join(USERPATH, nym + '.db')
