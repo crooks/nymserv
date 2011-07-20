@@ -273,7 +273,7 @@ def post_symmetric_message(payload, hash, key):
     mid, headers  = news_headers(dummy_conf)
     logging.debug("Symmetric encrypting message with key: " + key)
     enc_payload = gpg.symmetric(key, payload)
-    logging.debug("Passing message to NNTP Send")
+    logging.debug("Writing symmetric message to pool.")
     pool_write(headers + '\n' + enc_payload)
 
 def post_message(payload, conf):
