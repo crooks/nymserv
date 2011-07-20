@@ -86,6 +86,8 @@ def init_parser():
                       help = "List user configuration")
     parser.add_option("--cleanup", dest = "cleanup", action = "store_true",
                       default=False, help = "Perform some housekeeping")
+    parser.add_option("--delete", dest = "delete",
+                      help = "Delete a user account and key")
     return parser.parse_args()
 
 def news_headers(conf):
@@ -973,6 +975,27 @@ def stdout_user(user):
     userconf.close()
     sys.exit(0)
 
+def delete(email):
+    from os import remove
+    keyfile = os.path.join(USERPATH, email + '.key')
+    userfile = os.path.join(USERPATH, email + '.db')
+    if os.path.exists(userfile):
+        sys.stdout.write('Deleting userfile: %s\n' % userfile)
+        remove(userfile)
+    if os.path.exists(keyfile):
+        logging.info('Deleting keyfile: %s\n' % keyfile)
+        remove(keyfile)
+    sys.stdout.write("Deleting key: %s\n" % email)
+    fp = gpg.fingerprint(email)
+    sys.stdout.write("Fingerprint for %s is %s\n" % (email, fp))
+    if fp is not None:
+        gpg.delete_key(fp)
+        sys.stdout.write("%s: Deleted" % fp)
+        sys.exit(0)
+    logmes = "%s: Key not deleted, unable to determine Fingerprint.\n" % fp
+    sys.stdout.write(logmes)
+    sys.exit(1)
+
 def cleanup():
     resfile = os.path.join(ETCPATH, 'reserved_nyms')
     reserved_nyms = strutils.file2list(resfile)
@@ -1008,6 +1031,8 @@ def main():
         cleanup()
     if options.list:
         stdout_user(options.list)
+    if options.delete:
+        delete(options.delete)
     if options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(sys.stdin.read())
