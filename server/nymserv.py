@@ -39,11 +39,11 @@ import strutils
 
 LOGLEVEL = 'debug'
 HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'testlog')
-USERPATH = os.path.join(HOMEDIR, 'testusers')
+LOGPATH = os.path.join(HOMEDIR, 'log')
+USERPATH = os.path.join(HOMEDIR, 'users')
 ETCPATH = os.path.join(HOMEDIR, 'etc')
 POOLPATH = os.path.join(HOMEDIR, 'pool')
-KEYRING = os.path.join(HOMEDIR, 'testring')
+KEYRING = os.path.join(HOMEDIR, 'keyring')
 NYMDOMAIN = 'mixnym.net'
 HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
 SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
@@ -413,7 +413,9 @@ def msgparse(message):
     result, payload = gpg.decrypt_verify(message, config.passphrase)
     if not payload:
         # Simple bailout, we need some decrypted payload to continue.
-        log(301, "No decrypted payload, probably spam")
+        logmes = "No decrypted payload, probably spam. "
+        logmes += "Result was:\n%s" % result
+        log(301, logmes)
     if rname == 'config':
         process_config(result, payload)
     elif rname == "send":
