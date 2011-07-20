@@ -365,14 +365,6 @@ def getuidmails(uidmails):
             gooduids.append(uid)
     return gooduids
 
-def getfingerprint(keyid):
-    result = gpg.keyinfo(keyid)
-    info = gpgparse.statparse(result)
-    if 'fingerprint' in info:
-        return info['fingerprint']
-    else:
-        log(501, "Unable to get fingerprint for %s." % keyid)
-
 def split_email_domain(address):
     "Return the two parts of an email address"
     if not '@' in address:
@@ -534,12 +526,12 @@ def process_config(result, payload):
         result = gpg.import_key(payload)
         importstat = gpgparse.statparse(result)
         if 'fingerprint' in importstat:
-            fingerprint = getfingerprint(importstat['fingerprint'])
+            fingerprint = importstat['fingerprint']
         else:
             logmes = "Fingerprint not obtained during import. Requesting "
             logmes += "it now."
             logging.debug(logmes)
-            fingerprint = getfingerprint(importstat['keyid'])
+            fingerprint = gpg.fingerprint(importstat['keyid'])
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
         # Simple check to ensure the nym isn't on the reserved list.
