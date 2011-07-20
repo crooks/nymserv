@@ -97,6 +97,29 @@ class GnupgFunctions(GnuPG):
         proc.handles['stdout'].close()
         return result
 
+    def fingerprint(self, keyid):
+        """Return a single fingerprint in response to a keyid or email.
+        If more than one fingerprint is return from the supplied criteria,
+        None is returned.  This prevents potential ambiguity."""
+        self.options.meta_interactive = 0
+        self.options.homedir = self.keyring
+        idlist = []
+        idlist.append(keyid)
+        proc = self.run(['--fingerprint'], args=idlist, create_fhs=['stdout'])
+        result = proc.handles['stdout'].read()
+        proc.handles['stdout'].close()
+        lines = result.split("\n")
+        fps = []
+        for line in lines:
+            if "Key fingerprint" in line:
+                foo, fp = line.split(" = ")
+                fpc = fp.replace(" ", "")
+                fps.append(fpc)
+        if len(fps) == 1:
+            return fps[0]
+        return None
+        
+
     def emails_to_list(self):
         """This is a kludge, but a useful one.  It returns a list of all the
         uid pulic email addresses on a keyring."""
@@ -483,18 +506,9 @@ class GnupgStatParse():
         return gpgstat
 
 def main():
-    g = GnupgFunctions("/crypt/home/nymserv/testring")
+    g = GnupgFunctions("/crypt/home/nymserv/keyring")
     gp = GnupgStatParse()
-    f = open("/crypt/home/nymserv/flumpkey", "r")
-    key = f.read()
-    f.close()
-    result = g.import_key(key, dryrun = True)
-    print result
-    result = g.import_key(key, dryrun = False)
-    print result
-    stat = gp.statparse(result)
-    for k in stat:
-        print "%s: %s" % (k, stat[k])
+    print g.fingerprint("5F1F884F")
 
 # Call main function.
 if (__name__ == "__main__"):
