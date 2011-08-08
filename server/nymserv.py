@@ -519,7 +519,9 @@ def process_config(result, payload):
         # sender.
         logging.info("Importing %s. This time for real." % sigfor)
         result = gpg.import_key(payload)
+        logging.debug("Import result was:\n%s" % result)
         importstat = gpgparse.statparse(result)
+        logging.debug("Imported Keyid: %s" % importstat['keyid'])
         if 'fingerprint' in importstat:
             fingerprint = importstat['fingerprint']
         else:
@@ -527,6 +529,10 @@ def process_config(result, payload):
             logmes += "it now."
             logging.debug(logmes)
             fingerprint = gpg.fingerprint(importstat['keyid'])
+            if fingerprint is None:
+                logmes = "Failed to obtain fingerprint for "
+                logmes += "%(keyid)s" % importstat)
+                log(501, logmes)
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
         # Simple check to ensure the nym isn't on the reserved list.

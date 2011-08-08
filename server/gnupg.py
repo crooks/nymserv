@@ -110,11 +110,13 @@ class GnupgFunctions(GnuPG):
         proc.handles['stdout'].close()
         lines = result.split("\n")
         fps = []
+        lastline = ""
         for line in lines:
-            if "Key fingerprint" in line:
+            if "Key fingerprint" in line and lastline.startswith("pub"):
                 foo, fp = line.split(" = ")
                 fpc = fp.replace(" ", "")
                 fps.append(fpc)
+            lastline = line
         if len(fps) == 1:
             return fps[0]
         return None
@@ -508,7 +510,7 @@ class GnupgStatParse():
 def main():
     g = GnupgFunctions("/crypt/home/nymserv/keyring")
     gp = GnupgStatParse()
-    print g.fingerprint("5F1F884F")
+    print g.fingerprint("52B94FBE")
 
 # Call main function.
 if (__name__ == "__main__"):
