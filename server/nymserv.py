@@ -5,8 +5,7 @@
 # nymserv.py - A Basic Nymserver for delivering messages to a shared mailbox
 # such as alt.anonymous.messages.
 #
-# Copyright (C) 2010 Steve Crook <steve@mixmin.net>
-# $Id$
+# Copyright (C) 2011 Steve Crook <steve@mixmin.net>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the

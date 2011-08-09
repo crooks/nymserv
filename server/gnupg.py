@@ -3,9 +3,8 @@
 # vim: tabstop=4 expandtab shiftwidth=4 autoindent
 #
 # gnupg.py - GnuPG functionality through GnuPGInterface.
-# $Id: gnupg.py 122 2011-07-12 19:00:23Z nymserv $
 #
-# Copyright (C) 2010 Steve Crook <steve@mixmin.net>
+# Copyright (C) 2011 Steve Crook <steve@mixmin.net>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
