@@ -531,7 +531,7 @@ def process_config(result, payload):
             fingerprint = gpg.fingerprint(importstat['keyid'])
             if fingerprint is None:
                 logmes = "Failed to obtain fingerprint for "
-                logmes += "%(keyid)s" % importstat)
+                logmes += "%(keyid)s" % importstat
                 log(501, logmes)
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
