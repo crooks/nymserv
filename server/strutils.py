@@ -95,13 +95,18 @@ def file2text(filename, conf):
             payload += p + '\n\n'
     return payload.rstrip()
 
-def main():
-    mid = messageid('testing.invalid')
-    print mid
-    print underline('-', mid)
-    print "Date: " + datestr()
-    print "2 Hrs ago: " + hours_ago(2)
+def str2list(string):
+    """Take a comma-seperated string and return it as a list, with leading and
+    trailing spaces removed from each item."""
+    items = string.split(',')
+    newitems = []
+    for i in items:
+        newitems.append(i.strip())
+    return newitems
 
+def main():
+    s = '  item1, item2 '
+    print str2list(s)
 
 # Call main function.
 if (__name__ == "__main__"):
