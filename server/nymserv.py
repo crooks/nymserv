@@ -25,6 +25,7 @@ import sys
 import shelve
 import smtplib
 import email.utils
+import ConfigParser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -36,42 +37,12 @@ import hsub
 import urlfetch
 import strutils
 
-LOGLEVEL = 'debug'
-HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'log')
-USERPATH = os.path.join(HOMEDIR, 'users')
-ETCPATH = os.path.join(HOMEDIR, 'etc')
-POOLPATH = os.path.join(HOMEDIR, 'pool')
-KEYRING = os.path.join(HOMEDIR, 'keyring')
-NYMDOMAIN = 'mixnym.net'
-HOSTEDDOMAINS = ['is-not-my.name', 'mixnym.net']
-SIGNKEY = '94F204C28BF00937EFC85D1AFF4DB66014D0C447'
-HSUBLEN = 48
-
-gpg = gnupg.GnupgFunctions(KEYRING)
-#gpg = gnupg.GnupgFunctions()
-gpgparse = gnupg.GnupgStatParse()
-
-class config():
-    """This is only used to store the GnuPG Passphrase after reading it from a
-    file.  This is better than having it sat in a repository in plain-text."""
-    def __init__(self):
-        filename = os.path.join(ETCPATH, 'passphrase')
-        passphrase = strutils.file2list(filename)
-        if len(passphrase) == 1:
-            self.passphrase = passphrase[0]
-        elif len(passphrase) == 0:
-            log(401, 'No GnuPG passphrase defined.')
-        else:
-            log(401, 'Spurious data in passphrase file.')
-
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    logfile = os.path.join(LOGPATH, strutils.datestr())
     logging.basicConfig(
-        filename=logfile,
-        level = loglevels[LOGLEVEL],
+        filename=config.get('logging', 'file'),
+        level = loglevels[config.get('logging', 'level')],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
 
@@ -89,17 +60,75 @@ def init_parser():
                       help = "Delete a user account and key")
     return parser.parse_args()
 
+def init_config():
+    # By default, all the paths are subdirectories of the homedir.
+    config.add_section('paths')
+    homedir = os.path.expanduser('~')
+    config.set('paths', 'user', os.path.join(homedir, 'users'))
+    config.set('paths', 'etc', os.path.join(homedir, 'etc'))
+    config.set('paths', 'pool', os.path.join(homedir, 'pool'))
+
+    # Logging
+    config.add_section('logging')
+    config.set('logging', 'file', os.path.join(homedir, 'log', 'nym.log'))
+    config.set('logging', 'level', 'info')
+
+    # Config options for NNTP Posting
+    config.add_section('nntp')
+    config.set('nntp', 'newsgroups', 'alt.anonymous.messages')
+    config.set('nntp', 'from', 'Nobody <noreply@mixnym.net>')
+    config.set('nntp', 'path', 'nymserv.mixmin.net!not-for-mail')
+    config.set('nntp', 'injectinfo', 'nymserv.mixmin.net')
+    config.set('nntp', 'contact', 'abuse@mixmin.net')
+
+    # hSub options
+    config.add_section('hsub')
+    config.set('hsub', 'length', 48)
+
+    # PGP options.  These are arbitrary defaults as the options must be
+    # provided.
+    config.add_section('pgp')
+    config.set('pgp', 'keyring', os.path.join(homedir, 'keyring'))
+    #config.set('pgp', 'key', 'pgpfingerprint')
+    #config.set('pgp', 'passphrase', 'pgppassphrase')
+
+    config.add_section('domains')
+    config.set('domains', 'default', 'mixnym.net')
+    config.set('domains', 'hosted', 'is-not-my.name, mixnym.net')
+
+    configfile = os.path.join(homedir, '.nymservrc')
+    config.read(configfile)
+
+    with open('example.cfg', 'wb') as configfile:
+        config.write(configfile)
+    # Here's a kludge to convert the comma-seperated string of domains into
+    # a list that can be interrogated.
+    doms = strutils.str2list(config.get('domains', 'hosted'))
+    config.set('domains', 'hosted', doms)
+
+    # Abort checks if required config options are not defined.
+    if not config.has_option('pgp', 'key'):
+        sys.stdout.write("PGP key not specified in config. Aborting.\n")
+        sys.exit(1)
+    if not config.has_option('pgp', 'passphrase'):
+        logmes = "PGP passphrase not specified in config. Aborting.\n"
+        sys.stdout.write(logmes)
+        sys.exit(1)
+
 def news_headers(conf):
     """For all messages inbound to a.a.m for a Nym, the headers are standard.
     The only required info is whether to hSub the Subject.  We expect to be
     passed an hsub value if this is required, otherwise a fake is used."""
-    mid = strutils.messageid(NYMDOMAIN)
-    message  = "Path: nymserv.mixmin.net!not-for-mail\n"
-    message += "From: Anonymous <nobody@mixmin.net>\n"
+    # A full hex hSub is 80 hex digits. It's trimmed to match the length of
+    # other systems, such as eSub.
+    hsublen = config.getint('hsub', 'length')
+    mid = strutils.messageid(config.get('domains', 'default'))
+    message  = "Path: %s\n" % config.get('nntp', 'path')
+    message += "From: %s\n" % config.get('nntp', 'from')
     if 'hsub' in conf and conf['hsub']:
         # We use an hsub if we've been passed one.
         logging.debug("Generating hSub using key: " + conf['hsub'])
-        hash = hsub.hash(conf['hsub'], HSUBLEN)
+        hash = hsub.hash(conf['hsub'], hsublen)
         message += "Subject: " + hash + '\n'
         logging.debug("Generated a real hSub: " + hash)
     elif 'subject' in conf and conf['subject']:
@@ -108,26 +137,26 @@ def news_headers(conf):
         logging.debug("Using plain-text subject: %s" % conf['subject'])
     else:
         # We're doing a fake hsub.
-        # We have to half the HSUBLEN because we want the return in Hex
+        # We have to half the hsublen because we want the return in Hex
         # where each byte takes 2 digits.  To be safe, fetch too much entropy
         # and then trim it to size.
-        randbytes = int(HSUBLEN / 2 + 1)
+        randbytes = int(hsublen / 2 + 1)
         hash = hsub.cryptorandom(randbytes).encode('hex')
-        hash = hash[:HSUBLEN]
+        hash = hash[:hsublen]
         message += "Subject: " + hash + "\n"
         logging.debug("Fake hSub: " + hash)
     message += "Date: " + email.utils.formatdate() + "\n"
     message += "Message-ID: " + mid + "\n"
-    message += "Newsgroups: alt.anonymous.messages\n"
-    message += "Injection-Info: nymserv.mixmin.net; "
-    message += "mail-complaints-to=\"abuse@mixmin.net\"\n"
+    message += "Newsgroups: %s\n" % config.get('nntp', 'newsgroups')
+    message += "Injection-Info: %s; " % config.get('nntp', 'injectinfo')
+    message += "mail-complaints-to=\"%s\"\n" % config.get('nntp', 'contact')
     message += "Injection-Date: " + email.utils.formatdate() + "\n"
     return mid, message
 
 def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
     non-anonymous recipient."""
-    payload  = "From: send@" + NYMDOMAIN + "\n"
+    payload  = "From: send@" + config.get('domains', 'default') + "\n"
     payload += "To: " + msg['From'] + "\n"
     payload += "Subject: Delivery Notification for " + msg['To'] + "\n"
     payload += "Date: " + msg['Date'] + "\n"
@@ -292,8 +321,11 @@ def post_message(payload, conf):
         logging.debug('No Symmetric encryption defined, throwing KeyID')
         throwkid = True
     logging.debug('Signing and Encrypting message for ' + recipient)
-    enc_payload = gpg.signcrypt(recipient, SIGNKEY, config.passphrase,
-                                payload, throwkid)
+    enc_payload = gpg.signcrypt(recipient,
+                                config.get('pgp', 'key'),
+                                config.get('pgp', 'passphrase'),
+                                payload,
+                                throwkid)
     # Symmetrically wrap the payload if we have a Symmetric password defined.
     if 'symmetric' in conf and conf['symmetric']:
         logging.debug('Adding Symmetric Encryption layer')
@@ -307,7 +339,7 @@ def pool_write(payload):
     will act upon it.'''
     # Create a filename for the pool file with an 'a' prefix.
     poolfile = strutils.pool_filename('a')
-    fq_poolfile = os.path.join(POOLPATH, poolfile)
+    fq_poolfile = os.path.join(config.get('paths', 'pool'), poolfile)
     # Write the pool file
     f = open(fq_poolfile, 'w')
     f.write(payload)
@@ -358,9 +390,12 @@ def getuidmails(uidmails):
     """Take a list of email addresses and strip out any that aren't for our
     domains."""
     gooduids = []
+    # We fetch the domain list as a comma seperated string from config.
+    # str2list then converts it to a list of hosted domains.
+    doms = config.get('domains', 'hosted')
     for uid in uidmails:
         foo, domain = uid.split("@", 1)
-        if domain in HOSTEDDOMAINS:
+        if domain in doms:
             gooduids.append(uid)
     return gooduids
 
@@ -370,7 +405,8 @@ def msgparse(message):
         log(301, 'No recipient specified.')
     logging.info('Processing received email message for: ' + options.recipient)
     rname, rdomain = options.recipient.split("@", 1)
-    if rdomain not in HOSTEDDOMAINS:
+    doms = config.get('domains', 'hosted')
+    if rdomain not in doms:
         logmes =  'Message is for an invalid domain: %s.' % rdomain
         log(401, logmes)
     # require_pgp are recipient where we expect encrypted messages that we need
@@ -383,7 +419,8 @@ def msgparse(message):
         nymlist = gpg.emails_to_list()
         if not options.recipient in nymlist:
             log(301, 'No public key for recipient %s.' % options.recipient)
-        userfile = os.path.join(USERPATH, options.recipient + '.db')
+        userfile = os.path.join(config.get('paths', 'user'),
+                                options.recipient + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
@@ -402,7 +439,8 @@ def msgparse(message):
 
     # The recipient requires pgp processing. Let's start by trying to
     # decrypt and verify the message.
-    result, payload = gpg.decrypt_verify(message, config.passphrase)
+    result, payload = gpg.decrypt_verify(message,
+                                         config.get('pgp', 'passphrase'))
     if not payload:
         # Simple bailout, we need some decrypted payload to continue.
         logmes = "No decrypted payload, probably spam. "
@@ -535,7 +573,7 @@ def process_config(result, payload):
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
         # Simple check to ensure the nym isn't on the reserved list.
-        resfile = os.path.join(ETCPATH, 'reserved_nyms')
+        resfile = os.path.join(config.get('paths', 'etc'), 'reserved_nyms')
         reserved_nyms = strutils.file2list(resfile)
         nym, domain = sigfor.split("@", 1)
         if nym in reserved_nyms:
@@ -547,7 +585,8 @@ def process_config(result, payload):
             gnupg.delete_key(fingerprint)
             log(301, "%s is a reserved Nym. Deleted key." % nym)
 
-        userfile = os.path.join(USERPATH, sigfor + '.db')
+        userfile = os.path.join(config.get('paths', 'user'),
+                                sigfor + '.db')
         if os.path.isfile(userfile):
             logmes = "%s: This nym already has a DB file. " % sigfor
             logmes += "It could be a duplicate, or a key update. Checking it."
@@ -585,7 +624,8 @@ def process_config(result, payload):
         userconf['created'] = strutils.datestr()
         userconf['address'] = sigfor
         # Write the public key to a file, just in case we ever need it.
-        filename = os.path.join(USERPATH, sigfor + '.key')
+        filename = os.path.join(config.get('paths', 'user'),
+                                sigfor + '.key')
         f = open(filename, 'w')
         f.write(gpg.export(fingerprint) + '\n') 
         created = True  # Flag this as a newly created Nym
@@ -596,7 +636,8 @@ def process_config(result, payload):
     logging.debug('%s: Entering config modify routine.' % sigfor)
     if not created:
         # If we haven't done a create, the userconf isn't open yet.
-        userfile = os.path.join(USERPATH, sigfor + '.db')
+        userfile = os.path.join(config.get('paths', 'user'),
+                                sigfor + '.db')
         # This is a modify process, the user file must already exist.
         if os.path.isfile(userfile):
             userconf = shelve.open(userfile)
@@ -715,7 +756,8 @@ def process_send(result, payload):
     else:
         logging.info('No From header in payload, using signature.')
         send_msg['From'] = sigfor
-    userfile = os.path.join(USERPATH, sigfor + '.db')
+    userfile = os.path.join(config.get('paths', 'user'),
+                            sigfor + '.db')
     if os.path.exists(userfile):
         userconf = shelve.open(userfile)
     else:
@@ -736,7 +778,7 @@ def process_send(result, payload):
     if 'Message-ID' in send_msg:
         logging.debug('Using provided Message-ID')
     else:
-        send_mid = strutils.messageid(NYMDOMAIN)
+        send_mid = strutils.messageid(config.get('domains', 'default'))
         logmes  = 'Generating Message-ID ' + send_mid
         logmes += ' for outbound message.'
         logging.info(logmes)
@@ -825,7 +867,7 @@ def process_url(payload):
         hsubhash = key
     # Set up the basics of our multipart MIME response.
     url_msg = MIMEMultipart('alternative')
-    url_msg['From'] = 'url@' + NYMDOMAIN
+    url_msg['From'] = 'url@' + config.get('domains', 'default')
     url_msg['To'] = 'somebody@alt.anonymous.messages'
     url_msg['Subject'] = 'Nym Retrieval'
     url_msg['Date'] = email.utils.formatdate()
@@ -916,8 +958,8 @@ def delete_nym(email, userconf):
     # We now have an in-memory copy so we can close the shelve and delete it.
     userconf.close()
     from os import remove
-    keyfile = os.path.join(USERPATH, email + '.key')
-    userfile = os.path.join(USERPATH, email + '.db')
+    keyfile = os.path.join(config.get('paths', 'user'), email + '.key')
+    userfile = os.path.join(config.get('paths', 'user'), email + '.db')
     if os.path.exists(userfile):
         logging.info('Deleting userfile: ' + userfile)
         remove(userfile)
@@ -957,7 +999,7 @@ def log(rc, desc):
 def stdout_user(user):
     """Respond to a --list <email> request with a list of configuration
     options for the given user."""
-    userfile = os.path.join(USERPATH, user + '.db')
+    userfile = os.path.join(config.get('paths', 'user'), user + '.db')
     if not os.path.exists(userfile):
         sys.stdout.write(userfile + ': File not found\n')
         sys.exit(1)
@@ -969,8 +1011,8 @@ def stdout_user(user):
 
 def delete(email):
     from os import remove
-    keyfile = os.path.join(USERPATH, email + '.key')
-    userfile = os.path.join(USERPATH, email + '.db')
+    keyfile = os.path.join(config.get('paths', 'user'), email + '.key')
+    userfile = os.path.join(config.get('paths', 'user'), email + '.db')
     if os.path.exists(userfile):
         sys.stdout.write('Deleting userfile: %s\n' % userfile)
         remove(userfile)
@@ -989,15 +1031,15 @@ def delete(email):
     sys.exit(1)
 
 def cleanup():
-    resfile = os.path.join(ETCPATH, 'reserved_nyms')
+    resfile = os.path.join(config.get('paths', 'etc'), 'reserved_nyms')
     reserved_nyms = strutils.file2list(resfile)
     rc, nymlist = gpg.emails_to_list()
     for nym in nymlist:
         addy, domain = nym.split("@", 1)
         if addy in reserved_nyms:
             continue
-        userfile = os.path.join(USERPATH, nym + '.db')
-        keyfile = os.path.join(USERPATH, nym + '.key')
+        userfile = os.path.join(config.get('paths', 'user'), nym + '.db')
+        keyfile = os.path.join(config.get('paths', 'user'), nym + '.key')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
             if not 'address' in userconf:
@@ -1011,14 +1053,6 @@ def cleanup():
     sys.exit(0)    
 
 def main():
-    "Initialize logging functions, then process messages piped to stdin."
-    init_logging()
-    global options
-    (options, args) = init_parser()
-    global hsub 
-    hsub = hsub.HSub()
-    global config
-    config = config()
     if options.cleanup:
         cleanup()
     if options.list:
@@ -1033,5 +1067,14 @@ def main():
 
 # Call main function.
 if (__name__ == "__main__"):
+    config = ConfigParser.RawConfigParser()
+    init_config()
+    # Logging comes after config as we need config to define the loglevel and
+    # log path.  Chicken and egg foo.
+    init_logging()
+    (options, args) = init_parser()
+    hsub = hsub.HSub()
+    gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
+    gpgparse = gnupg.GnupgStatParse()
     main()
 

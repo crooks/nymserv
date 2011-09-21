@@ -1,0 +1,88 @@
+# vim: syntax=cfg
+
+# Sample Nymserver configuration file - 2011/09/21
+#
+# To use this file, rename it .nymservrc and place it in your homedir.
+# The settings shown are the defaults unless otherwise stated.
+
+[paths]
+# The user folder is the most important element of the server (along with
+# the GnuPG keyring). The user folder contains the Public Keys and
+# configuration database for each Nym. Make sure it's backed up or your users
+# may, one day, be very sad.
+#user = /home/nymserv/users
+
+# The pool is used to store messages waiting to be posted to Usenet.
+#pool = /home/nymserv/pool
+
+# As per tradition, the etc folder is the place where configuration details
+# are stored.
+#etc = /home/nymserv/etc
+
+[logging]
+# The fully-qualfied path and filename or where the nymserver should write its
+# log. No auto-rotation is performed on this so you might want to use a
+# logrotate process to take care of it.
+#file = /crypt/home/nymserv/log/nym.log
+
+# Level of logging.  Choose from error, warn, info, debug in increasing levels
+# of verbosity.
+#level = info
+
+
+[pgp]
+# The directory where GnuPG public and secret keyrings will be located. It's a
+# good idea to make this different to the GnuPG default (~/.gnupg) as
+# accidents do happen.
+#keyring = /home/nymserv/keyring
+
+# The passphrase for unlocking the Nymserver's secret key.  Sadly there's no
+# option but to place it here in plain-text.  This option has no default and
+# must be set before the Nymserver will work.
+#passphrase = pgppassphrase
+
+# This needs to be the Nymserver's public keyid.  If possible, set it to the
+# complete fingerprint to avoid any possible ambiguity. This option has no
+# default and must be set before the Nymserver will work.
+#key = pgpkey_fingerprint
+
+[domains]
+# The domain name the Nymserver actually uses in outbound posts and email.
+# This should almost certainly be one of the domains specified in 'hosted'.
+#default = nymserv.net
+
+# This is a comma-seperated list of all the domains the Nymserver plays host
+# to.  Messages to any of these will be accepted by the server.
+#hosted = nymserv.net,othernym.org
+
+[hsub]
+# Although a full hSub is 80 characters long, it make sense to blend in with
+# the older, eSub format which is only 48 chars.  This should never be set
+# below 48 or higher than 80.
+#length = 48
+
+[nntp]
+# Refer to the NNTP specification for more detail.  This is the Path header
+# the Nymserver will insert as the injecting news host. You certainly want to
+# set it to something meaningful to your environment.
+#path = nymserv.domain.org!not-for-mail
+
+# Users of Usenet like to have somewhere to complain.  As this service should
+# only ever post to alt.anonymous.messages, hopefully they will not need a
+# contact address but you should still provide one.
+#contact = abuse@domain.org
+
+# The From header that will be inserted into messages posted to Usenet. I
+# think noreply@ is a good start.  The domain should be your own.
+#from = Nobody <noreply@domain.org>
+
+# Injection-Info is a relatively new header to Usenet. We add it because doing
+# so is easy.  It serves no purpose other than to identify the point of
+# injection.
+#injectinfo = nymserv.domain.org
+
+# You would probably only change this for testing purposes.  The group
+# alt.anonymous.messages has been the standard for Nym replies since, well,
+# forever really.
+#newsgroups = alt.anonymous.messages
+
