@@ -96,6 +96,9 @@ def init_config():
     config.set('domains', 'default', 'mixnym.net')
     config.set('domains', 'hosted', 'is-not-my.name, mixnym.net')
 
+    config.add_section('thresholds')
+    config.set('thresholds', 'daily_send_limit', 50)
+
     configfile = os.path.join(homedir, '.nymservrc')
     config.read(configfile)
 
@@ -821,7 +824,8 @@ def process_send(result, payload):
     logmes =  '%s has sent %d' % (sigfor, userconf['sent_today'])
     logmes += ' messages today and %d in total.' % userconf['sent']
     logging.debug(logmes)
-    if userconf['sent_today'] > 50:
+    if userconf['sent_today'] > config.getint('thresholds',
+                                              'daily_send_limit'):
         userconf['block_sends'] = True
         logmes =  '%s has exceeded daily sending allowance.' % sigfor
         logmes += ' Sending is now disabled until manual intervention'

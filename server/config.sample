@@ -86,3 +86,15 @@
 # forever really.
 #newsgroups = alt.anonymous.messages
 
+[thresholds]
+# Sometimes bad things occur and Nyms are flooded or worse, used to flood
+# other people.  These thresholds define maximum limits of Nym activity before
+# temporary blocks are put in place.
+
+# The send threshold is probably the most important.  Incoming messages to a
+# Nym might generate a load of traffic in alt.anonymous.messages but the
+# chances are, nobody will notice.  An evil Nymholder using the service to
+# flood an individual is not only unsociable but bad for the service image.
+# When this limit is hit in a single day (midight - midnight UTC), sending
+# for that Nym will be disabled.
+#dailt_send_limit = 50
