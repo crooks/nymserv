@@ -101,6 +101,8 @@ def init_config():
     config.add_section('thresholds')
     config.set('thresholds', 'daily_send_limit', 50)
 
+    # Try and process the .nymservrc file.  If it doesn't exist, we bailout
+    # as some options are compulsory.
     if not options.rc:
         configfile = os.path.join(homedir, '.nymservrc')
     else:
