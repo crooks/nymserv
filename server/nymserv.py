@@ -50,6 +50,8 @@ def init_parser():
     "Parse command line options."
     parser = OptionParser()
 
+    parser.add_option("--config", dest = "rc",
+                      help = "Override .nymservrc location")
     parser.add_option("-r", "--recipient", dest = "recipient",
                       help = "Recipient email address")
     parser.add_option("-l", "--list", dest = "list",
@@ -99,11 +101,18 @@ def init_config():
     config.add_section('thresholds')
     config.set('thresholds', 'daily_send_limit', 50)
 
-    configfile = os.path.join(homedir, '.nymservrc')
-    config.read(configfile)
+    if not options.rc:
+        configfile = os.path.join(homedir, '.nymservrc')
+    else:
+        configfile = options.rc
+    if os.path.isfile(configfile):
+        config.read(configfile)
+    else:
+        sys.stdout.write("%s: Config file does not exist\n" % configfile)
+        sys.exit(1)
 
-    with open('example.cfg', 'wb') as configfile:
-        config.write(configfile)
+    #with open('example.cfg', 'wb') as configfile:
+    #    config.write(configfile)
     # Here's a kludge to convert the comma-seperated string of domains into
     # a list that can be interrogated.
     doms = strutils.str2list(config.get('domains', 'hosted'))
@@ -1071,12 +1080,14 @@ def main():
 
 # Call main function.
 if (__name__ == "__main__"):
+    # Paser before config in case someone wants to override the default
+    # .nymservrc file.
+    (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
     init_config()
     # Logging comes after config as we need config to define the loglevel and
     # log path.  Chicken and egg foo.
     init_logging()
-    (options, args) = init_parser()
     hsub = hsub.HSub()
     gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnupgStatParse()
