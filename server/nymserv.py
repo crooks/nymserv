@@ -20,6 +20,7 @@
 import re
 import email
 import logging
+import mailbox
 import os.path
 import sys
 import shelve
@@ -60,6 +61,8 @@ def init_parser():
                       default=False, help = "Perform some housekeeping")
     parser.add_option("--delete", dest = "delete",
                       help = "Delete a user account and key")
+    parser.add_option("--process", dest = "process", action = "store_true",
+                      help = "Process a maildir (Experimental")
     return parser.parse_args()
 
 def init_config():
@@ -69,6 +72,7 @@ def init_config():
     config.set('paths', 'user', os.path.join(homedir, 'users'))
     config.set('paths', 'etc', os.path.join(homedir, 'etc'))
     config.set('paths', 'pool', os.path.join(homedir, 'pool'))
+    config.set('paths', 'maildir', os.path.join(homedir, 'Maildir'))
 
     # Logging
     config.add_section('logging')
@@ -413,28 +417,61 @@ def getuidmails(uidmails):
             gooduids.append(uid)
     return gooduids
 
-def msgparse(message):
-    "Parse a received email."
-    if not options.recipient:
-        log(301, 'No recipient specified.')
-    logging.info('Processing received email message for: ' + options.recipient)
-    rname, rdomain = options.recipient.split("@", 1)
+def ascertain_recipient(message):
+    """This function attempts to work out who the recipient of a message is.
+    Not as easy as it sounds!  Postfix appends an X-Original-To header
+    containing this info but there's no guarantee of its uniqueness as other
+    systems (such as mailing lists) also append the same header.  Consequently
+    it's necessary to parse the whole header in search of an X-Original-To
+    matching the domains the Nymserver processes."""
     doms = config.get('domains', 'hosted')
-    if rdomain not in doms:
-        logmes =  'Message is for an invalid domain: %s.' % rdomain
-        log(401, logmes)
-    # require_pgp are recipient where we expect encrypted messages that we need
-    # to processed in some manner.
+    msglines = message.split("\n")
+    for line in msglines:
+        if not line.startswith("X-Original-To: "):
+            continue
+        # Strip the header from its content.
+        recipient = line.split(": ", 1)[1]
+        # Hopefully the content is an email address.
+        if not '@' in recipient:
+            logging.info("Invalid recipient found: %s" % recipient)
+            continue
+        # Split the email address and validate the domain.
+        domain = recipient.split("@", 1)[1]
+        if domain in doms:
+            logging.info("Extracted valid recipient: %s" % recipient)
+            return recipient
+        else:
+            logging.info("Invalid recipient: %s" % recipient)
+            continue
+        # When we encounter an empty line, it's the end of the header section.
+        if not line:
+            logmes = "We got a message with no ascertainable recipient "
+            logmes += "for the Nymserver. This probably shouldn't happen."
+            logging.warn(logmes)
+            return None
+    logmes = "Unable to ascertain a recipient for this message. "
+    logmes += "End of message was reached without finding a recipient "
+    logmes += "or a blank line after the headers."
+    logging.warn(logmes)
+    return None
+
+def msgparse(recipient, message):
+    "Parse a received email."
+    # Split a recipient email address into two components; local-part and
+    # domain.
+    rlocal, rdomain = recipient.split('@', 1)
+    # require_pgp is a list of recipients for whom we expect encrypted messages
+    # that require processing in some manner.
     require_pgp = ['config', 'send', 'url']
-    if rname not in require_pgp:
+    if rlocal not in require_pgp:
         # At this point, we're assuming this is an inbound message to a Nym.
         # It might be encrypted but we don't care as we're just passing on the
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
-        if not options.recipient in nymlist:
-            log(301, 'No public key for recipient %s.' % options.recipient)
+        if not recipient in nymlist:
+            log(301, 'No public key for recipient %s.' % recipient)
         userfile = os.path.join(config.get('paths', 'user'),
-                                options.recipient + '.db')
+                                recipient + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
         else:
@@ -460,11 +497,11 @@ def msgparse(message):
         logmes = "No decrypted payload, probably spam. "
         logmes += "Result was:\n%s" % result
         log(301, logmes)
-    if rname == 'config':
+    if rlocal == 'config':
         process_config(result, payload)
-    elif rname == "send":
+    elif rlocal == "send":
         process_send(result, payload)
-    elif rname == 'url':
+    elif rlocal == 'url':
         process_url(payload)
 
 def process_config(result, payload):
@@ -1070,15 +1107,21 @@ def cleanup():
 def main():
     if options.cleanup:
         cleanup()
-    if options.list:
+    elif options.list:
         stdout_user(options.list)
-    if options.delete:
+    elif options.delete:
         delete(options.delete)
-    if options.recipient:
+    elif options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
-        msgparse(sys.stdin.read())
-    else:
-        sys.stdout.write("Error: No recipient specified.\n")
+        msgparse(recipient, sys.stdin.read())
+    elif options.process:
+        inbox = mailbox.Maildir(config.get('paths', 'maildir'))
+        for key in inbox.iterkeys():
+            message = inbox.get_string(key)
+            recipient = ascertain_recipient(message)
+            if recipient is not None:
+                msgparse(recipient, message)
+            #inbox.discard(key)
 
 # Call main function.
 if (__name__ == "__main__"):
