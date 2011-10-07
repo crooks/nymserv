@@ -38,6 +38,56 @@ import hsub
 import urlfetch
 import strutils
 
+class UpdateUser():
+    def __init__(self):
+        # Valid fields are those that are deemed user-definable.
+        self.valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
+        self.alternatives = {'hash-subject'      :   'hsub',
+                             'subject-password'  :   'hsub',
+                             'hash-key'          :   'hsub'}
+        ignore_fields = ['version'] # Public keys contain "Version: "
+        # We ignore the next two fields to prevent warnings about MIME content.
+        ignore_fields.append("content-type")
+        ignore_fields.append("content-disposition")
+        self.confopt_re = re.compile('([\w\-]+?):\s+(.+)')
+        self.ignore_fields = ignore_fields
+    
+    def make_moddict(self, text):
+        """Parse a block of text for lines in the format Key: Option.  Compare
+        these with a list of valid fields and then construct a dictionary of
+        these options for return.
+
+        """
+        lines = text.split('\n')
+        moddict = {}
+        for line in lines:
+            confopt = iself.confopt_re.match(line)
+            if not confopt:
+                continue
+            # Set field to the header name and value to its content.
+            field = confopt.group(1).lower()
+            value = confopt.group(2).rstrip()
+            # Some fields have alternative names.
+            if field in self.alternatives:
+                field = self.alternatives[field]
+            if field in moddict:
+                logmes = "%s: Duplicate field in modify request." % field
+                logging.info(logmes)
+                continue
+            # If we match a field:value pair, is it valid?
+            if not field in self.valid_fields:
+                if not field in self.ignore_fields:
+                    logmes = "%s: Invalid field in modify " % field
+                    logmes += "request"
+                    logging.info(logmes)
+                continue
+            # None or False means set the field to False.
+            if value.lower() == 'none' or value.lower() == 'false':
+                moddict[field] = False
+            else:
+                moddict[field] = value
+        return moddict
+
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
@@ -73,6 +123,7 @@ def init_config():
     config.set('paths', 'etc', os.path.join(homedir, 'etc'))
     config.set('paths', 'pool', os.path.join(homedir, 'pool'))
     config.set('paths', 'maildir', os.path.join(homedir, 'Maildir'))
+    config.set('paths', 'held', os.path.join(homedir, 'Maildir', 'held'))
 
     # Logging
     config.add_section('logging')
@@ -364,46 +415,6 @@ def pool_write(payload):
     logging.info('%s: Added to pool' % poolfile)
     f.close()
 
-def user_update(text):
-    """Parse a block of text for lines in the format Key: Option.
-    Compare these with a list of valid fields and then construct a dictionary
-    of these options for return."""
-    # Valid fields are those that are deemed user-definable.
-    valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
-    alternatives = {'hash-subject'      :   'hsub',
-                    'subject-password'  :   'hsub',
-                    'hash-key'          :   'hsub'}
-    ignore_fields = ['version'] # Public keys contain "Version: "
-    # We ignore the next two fields to prevent warnings about MIME content.
-    ignore_fields.append("content-type")
-    ignore_fields.append("content-disposition")
-    confopt_re = re.compile('([\w\-]+?):\s+(.+)')
-    lines = text.split('\n')
-    moddict = {}
-    for line in lines:
-        confopt = confopt_re.match(line)
-        if confopt:
-            # Set field to the header name and value to its content.
-            field = confopt.group(1).lower()
-            value = confopt.group(2).rstrip()
-            # Some fields have alternative names.
-            if field in alternatives:
-                field = alternatives[field]
-            if field in moddict:
-                logging.info(field + ': Duplicate field in modify request.')
-                continue
-            # If we match a field:value pair, is it valid?
-            if not field in valid_fields:
-                if not field in ignore_fields:
-                    logging.info(field + ': Invalid field in modify request.')
-                continue
-            # None or False means set the field to False.
-            if value.lower() == 'none' or value.lower() == 'false':
-                moddict[field] = False
-            else:
-                moddict[field] = value
-    return moddict
-
 def getuidmails(uidmails):
     """Take a list of email addresses and strip out any that aren't for our
     domains."""
@@ -469,7 +480,8 @@ def msgparse(recipient, message):
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
         if not recipient in nymlist:
-            log(301, 'No public key for recipient %s.' % recipient)
+            logging.info('No public key for recipient %s.' % recipient)
+            return False
         userfile = os.path.join(config.get('paths', 'user'),
                                 recipient + '.db')
         if os.path.exists(userfile):
@@ -477,7 +489,8 @@ def msgparse(recipient, message):
         else:
             # This occurs when we have a recipient, with a key on the keyring
             # but no corresponding user DB.
-            logging.error('%s: File not found.' % userfile)
+            logging.warn('%s: File not found.' % userfile)
+            return False
         post_message(message, userconf)
         if 'received' in userconf:
             userconf['received'] += 1
@@ -485,7 +498,7 @@ def msgparse(recipient, message):
             userconf['received'] = 1
         userconf['last_received'] = strutils.datestr()
         userconf.close()
-        sys.exit(001)
+        return True
         # That's it for inbound messages to Nyms.
 
     # The recipient requires pgp processing. Let's start by trying to
@@ -698,7 +711,7 @@ def process_config(result, payload):
             log(501, "%s: File doesn't exist." % userconf)
     # user_update creates a new dict of keys that need to be created or changed
     # in the master userconf dict.
-    moddict = user_update(payload)
+    moddict = userconf.make_moddict(payload)
     # Does the mod request include a Delete statement?
     if 'delete' in moddict and moddict['delete'].lower() == 'yes':
         logmessage  = sigfor + ": Starting delete process "
@@ -1115,13 +1128,26 @@ def main():
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         msgparse(recipient, sys.stdin.read())
     elif options.process:
+        # The inbox is where we expect to read messages from.
         inbox = mailbox.Maildir(config.get('paths', 'maildir'))
+        # After reading from inbox, failed messages are written to held.
+        held = mailbox.Maildir(config.get('paths', 'held'))
         for key in inbox.iterkeys():
             message = inbox.get_string(key)
             recipient = ascertain_recipient(message)
-            if recipient is not None:
-                msgparse(recipient, message)
-            #inbox.discard(key)
+            if recipient is None:
+                processed = False
+            else:
+                processed = msgparse(recipient, message)
+            if not processed:
+                heldkey = held.add(message)
+                logmes = "Message processing failed.  Saving as %s" % heldkey
+                logging.warn(logmes)
+            # We discard the message from inbox, regardless of whether it was
+            # successfully processed, otherwise we'll keep retrying it.
+            inbox.discard(key)
+            logging.debug("Deleted %s from mailq" % key)
+        logging.debug("Mailbox processing completed")
 
 # Call main function.
 if (__name__ == "__main__"):
@@ -1129,6 +1155,7 @@ if (__name__ == "__main__"):
     # .nymservrc file.
     (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
+    userconf = UpdateUser()
     init_config()
     # Logging comes after config as we need config to define the loglevel and
     # log path.  Chicken and egg foo.
