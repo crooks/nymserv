@@ -830,7 +830,7 @@ def process_send(result, payload):
             logging.debug('From header in payload matches signature.')
         else:
             logmes = "From header says %s " % send_email
-            logmes += "but signature is for.  " % sigfor
+            logmes += "but signature is for %s. " % sigfor
             logmes += "Using signature address."
             logging.info(logmes)
     else:
