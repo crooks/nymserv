@@ -61,7 +61,7 @@ class UpdateUser():
         lines = text.split('\n')
         moddict = {}
         for line in lines:
-            confopt = iself.confopt_re.match(line)
+            confopt = self.confopt_re.match(line)
             if not confopt:
                 continue
             # Set field to the header name and value to its content.
@@ -87,6 +87,112 @@ class UpdateUser():
             else:
                 moddict[field] = value
         return moddict
+
+class Posting():
+    def news_headers(self, conf):
+        """For all messages inbound to a.a.m for a Nym, the headers are
+        standard.  The only required info is whether to hSub the Subject. We
+        expect to be passed an hsub value if this is required, otherwise a
+        fake is used.
+
+        """
+        # A full hex hSub is 80 hex digits. It's trimmed to match the length of
+        # other systems, such as eSub.
+        hsublen = config.getint('hsub', 'length')
+        mid = strutils.messageid(config.get('domains', 'default'))
+        message  = "Path: %s\n" % config.get('nntp', 'path')
+        message += "From: %s\n" % config.get('nntp', 'from')
+        if 'hsub' in conf and conf['hsub']:
+            # We use an hsub if we've been passed one.
+            logging.debug("Generating hSub using key: " + conf['hsub'])
+            hash = hsub.hash(conf['hsub'], hsublen)
+            message += "Subject: " + hash + '\n'
+            logging.debug("Generated a real hSub: " + hash)
+        elif 'subject' in conf and conf['subject']:
+            # We're doing a plain-text Subject.
+            message += "Subject: %s\n" % conf['subject']
+            logging.debug("Using plain-text subject: %s" % conf['subject'])
+        else:
+            # We're doing a fake hsub.
+            # We have to half the hsublen because we want the return in Hex
+            # where each byte takes 2 digits.  To be safe, fetch too much
+            # entropy and then trim it to size.
+            randbytes = int(hsublen / 2 + 1)
+            hash = hsub.cryptorandom(randbytes).encode('hex')
+            hash = hash[:hsublen]
+            message += "Subject: " + hash + "\n"
+            logging.debug("Fake hSub: " + hash)
+        message += "Date: " + email.utils.formatdate() + "\n"
+        message += "Message-ID: " + mid + "\n"
+        message += "Newsgroups: %s\n" % config.get('nntp', 'newsgroups')
+        message += "Injection-Info: %s; " % config.get('nntp', 'injectinfo')
+        message += "mail-complaints-to=\"%s\"\n" % \
+                                            config.get('nntp', 'contact')
+        message += "Injection-Date: " + email.utils.formatdate() + "\n"
+        return mid, message
+
+    def post_symmetric_message(self, payload, hash, key):
+        """Symmetrically encrypt a payload and post it.  This function is
+        currently only called for posting URLs.
+
+        """
+        # We need our hsub hash in a dictionary because that's what
+        # news_headers expects to receive.
+        dummy_conf = { "hsub" : hash }
+        mid, headers  = self.news_headers(dummy_conf)
+        logging.debug("Symmetric encrypting message with key: " + key)
+        enc_payload = gpg.symmetric(key, payload)
+        logging.debug("Writing symmetric message to pool.")
+        self.pool_write(headers + '\n' + enc_payload)
+
+    def post_message(self, payload, conf):
+        """Take a payload and add headers to it for News posting.  The
+        dictionary 'conf' contains specific formatting instructions.
+
+        """
+        mid, headers  = self.news_headers(conf)
+        if not 'fingerprint' in conf:
+            conf.close()
+            log(501, 'User shelve contains no fingerprint key.')
+        recipient = conf['fingerprint']
+        # If Symmetric encryption is specified, we don't need to throw the
+        # Keyid during Asymmetric encryption.
+        if 'symmetric' in conf and conf['symmetric']:
+            logging.debug('Symmetric encryption defined, not throwing KeyID')
+            throwkid = False
+        else:
+            logging.debug('No Symmetric encryption defined, throwing KeyID')
+            throwkid = True
+        logging.debug('Signing and Encrypting message for ' + recipient)
+        enc_payload = gpg.signcrypt(recipient,
+                                    config.get('pgp', 'key'),
+                                    config.get('pgp', 'passphrase'),
+                                    payload,
+                                    throwkid)
+        # Symmetrically wrap the payload if we have a Symmetric password
+        # defined.
+        if 'symmetric' in conf and conf['symmetric']:
+            logging.debug('Adding Symmetric Encryption layer')
+            enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
+        self.pool_write(headers + '\n' + enc_payload)
+
+    def pool_write(self, payload):
+        """Write the received message (complete with headers) to the pool.  The
+        pool filename is formatted ayyyymmdd-rrrrrr, where r is a random lower
+        case letter. The 'a' prefix indicates Anonymous and our pool processor
+        will act upon it.
+
+        """
+        # Create a filename for the pool file with an 'a' prefix.
+        poolfile = strutils.pool_filename('a')
+        fq_poolfile = os.path.join(config.get('paths', 'pool'), poolfile)
+        # Write the pool file
+        f = open(fq_poolfile, 'w')
+        f.write(payload)
+        logging.info('%s: Added to pool' % poolfile)
+        f.close()
+
+
 
 def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
@@ -183,44 +289,6 @@ def init_config():
         logmes = "PGP passphrase not specified in config. Aborting.\n"
         sys.stdout.write(logmes)
         sys.exit(1)
-
-def news_headers(conf):
-    """For all messages inbound to a.a.m for a Nym, the headers are standard.
-    The only required info is whether to hSub the Subject.  We expect to be
-    passed an hsub value if this is required, otherwise a fake is used."""
-    # A full hex hSub is 80 hex digits. It's trimmed to match the length of
-    # other systems, such as eSub.
-    hsublen = config.getint('hsub', 'length')
-    mid = strutils.messageid(config.get('domains', 'default'))
-    message  = "Path: %s\n" % config.get('nntp', 'path')
-    message += "From: %s\n" % config.get('nntp', 'from')
-    if 'hsub' in conf and conf['hsub']:
-        # We use an hsub if we've been passed one.
-        logging.debug("Generating hSub using key: " + conf['hsub'])
-        hash = hsub.hash(conf['hsub'], hsublen)
-        message += "Subject: " + hash + '\n'
-        logging.debug("Generated a real hSub: " + hash)
-    elif 'subject' in conf and conf['subject']:
-        # We're doing a plain-text Subject.
-        message += "Subject: %s\n" % conf['subject']
-        logging.debug("Using plain-text subject: %s" % conf['subject'])
-    else:
-        # We're doing a fake hsub.
-        # We have to half the hsublen because we want the return in Hex
-        # where each byte takes 2 digits.  To be safe, fetch too much entropy
-        # and then trim it to size.
-        randbytes = int(hsublen / 2 + 1)
-        hash = hsub.cryptorandom(randbytes).encode('hex')
-        hash = hash[:hsublen]
-        message += "Subject: " + hash + "\n"
-        logging.debug("Fake hSub: " + hash)
-    message += "Date: " + email.utils.formatdate() + "\n"
-    message += "Message-ID: " + mid + "\n"
-    message += "Newsgroups: %s\n" % config.get('nntp', 'newsgroups')
-    message += "Injection-Info: %s; " % config.get('nntp', 'injectinfo')
-    message += "mail-complaints-to=\"%s\"\n" % config.get('nntp', 'contact')
-    message += "Injection-Date: " + email.utils.formatdate() + "\n"
-    return mid, message
 
 def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
@@ -361,60 +429,6 @@ def email_message(sender_email, recipient_string, message):
             log(201, logmessage)
     server.quit()
 
-def post_symmetric_message(payload, hash, key):
-    """Symmetrically encrypt a payload and post it.  This function is
-    currently only called for posting URLs"""
-    # We need our hsub hash in a dictionary because that's what news_headers
-    # expects to receive.
-    dummy_conf = { "hsub" : hash }
-    mid, headers  = news_headers(dummy_conf)
-    logging.debug("Symmetric encrypting message with key: " + key)
-    enc_payload = gpg.symmetric(key, payload)
-    logging.debug("Writing symmetric message to pool.")
-    pool_write(headers + '\n' + enc_payload)
-
-def post_message(payload, conf):
-    """Take a payload and add headers to it for News posting.  The dictionary
-    'conf' contains specific formatting instructions."""
-    mid, headers  = news_headers(conf)
-    if not 'fingerprint' in conf:
-        conf.close()
-        log(501, 'User shelve contains no fingerprint key.')
-    recipient = conf['fingerprint']
-    # If Symmetric encryption is specified, we don't need to throw the
-    # Keyid during Asymmetric encryption.
-    if 'symmetric' in conf and conf['symmetric']:
-        logging.debug('Symmetric encryption defined, not throwing KeyID')
-        throwkid = False
-    else:
-        logging.debug('No Symmetric encryption defined, throwing KeyID')
-        throwkid = True
-    logging.debug('Signing and Encrypting message for ' + recipient)
-    enc_payload = gpg.signcrypt(recipient,
-                                config.get('pgp', 'key'),
-                                config.get('pgp', 'passphrase'),
-                                payload,
-                                throwkid)
-    # Symmetrically wrap the payload if we have a Symmetric password defined.
-    if 'symmetric' in conf and conf['symmetric']:
-        logging.debug('Adding Symmetric Encryption layer')
-        enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
-    pool_write(headers + '\n' + enc_payload)
-
-def pool_write(payload):
-    '''Write the received message (complete with headers) to the pool.
-    The pool filename is formatted ayyyymmdd-rrrrrr, where r is a random lower
-    case letter. The 'a' prefix indicates Anonymous and our pool processor
-    will act upon it.'''
-    # Create a filename for the pool file with an 'a' prefix.
-    poolfile = strutils.pool_filename('a')
-    fq_poolfile = os.path.join(config.get('paths', 'pool'), poolfile)
-    # Write the pool file
-    f = open(fq_poolfile, 'w')
-    f.write(payload)
-    logging.info('%s: Added to pool' % poolfile)
-    f.close()
-
 def getuidmails(uidmails):
     """Take a list of email addresses and strip out any that aren't for our
     domains."""
@@ -434,7 +448,9 @@ def ascertain_recipient(message):
     containing this info but there's no guarantee of its uniqueness as other
     systems (such as mailing lists) also append the same header.  Consequently
     it's necessary to parse the whole header in search of an X-Original-To
-    matching the domains the Nymserver processes."""
+    matching the domains the Nymserver processes.
+
+    """
     doms = config.get('domains', 'hosted')
     msglines = message.split("\n")
     for line in msglines:
@@ -491,7 +507,7 @@ def msgparse(recipient, message):
             # but no corresponding user DB.
             logging.warn('%s: File not found.' % userfile)
             return False
-        post_message(message, userconf)
+        posting.post_message(message, userconf)
         if 'received' in userconf:
             userconf['received'] += 1
         else:
@@ -645,7 +661,7 @@ def process_config(result, payload):
             # In this instance there is no valid userconf shelve to read so we
             # create a false one to satisfy post_message().
             conf = {'fingerprint' : fingerprint}
-            post_message(res_message, conf)
+            posting.post_message(res_message, conf)
             gnupg.delete_key(fingerprint)
             log(301, "%s is a reserved Nym. Deleted key." % nym)
 
@@ -668,7 +684,7 @@ def process_config(result, payload):
                 dup_message = duplicate_message(importstat['keyid'], sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
-                post_message(dup_message, conf)
+                posting.post_message(dup_message, conf)
                 gpg.delete_key(fingerprint)
                 logmes = "%s: Requested but already exists. " % sigfor
                 logmes += "Sent duplicate Nym message and deleted key."
@@ -748,7 +764,7 @@ def process_config(result, payload):
     else:
         reply_message = modify_success_message(userconf)
         logging.debug("Created modify reply message")
-    post_message(reply_message, userconf)
+    posting.post_message(reply_message, userconf)
     userconf.close()
     sys.exit(0)
 
@@ -835,7 +851,7 @@ def process_send(result, payload):
     # Check we actually have a recipient for the message
     if 'To' not in send_msg:
         err_message = send_no_recipient_message(sigfor, send_msg['Subject'])
-        post_message(err_message, userconf)
+        posting.post_message(err_message, userconf)
         userconf.close()
         log(301, 'No recipient specified in To header.')
     # If we receive a Message-ID, use it, otherwise generate one.
@@ -861,7 +877,7 @@ def process_send(result, payload):
     email_message(sigfor, recipients, send_msg)
     suc_message = send_success_message(send_msg)
     logging.info('Posting Send confirmation to ' + sigfor)
-    post_message(suc_message, userconf)
+    posting.post_message(suc_message, userconf)
     if 'sent' in userconf:
         userconf['sent'] += 1
     else:
@@ -1011,7 +1027,7 @@ def process_url(payload):
     # standard mail client like Mutt.
     mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
     mime_msg += url_msg.as_string() + '\n'
-    post_symmetric_message(mime_msg, hsubhash, key)
+    posting.post_symmetric_message(mime_msg, hsubhash, key)
     sys.exit(0)
 
 def delete_nym(email, userconf):
@@ -1034,7 +1050,7 @@ def delete_nym(email, userconf):
     # We have to post the delete message before we remove the key from the
     # keyring, otherwise we can't encrypt the message!
     del_message = delete_success_message(email)
-    post_message(del_message, memcopy)
+    posting.post_message(del_message, memcopy)
     logging.info('%(fingerprint)s: Deleting from keyring.' % memcopy)
     gpg.delete_key(memcopy['fingerprint'])
     log(301, 'Deletion process complete.')
@@ -1126,7 +1142,9 @@ def main():
         delete(options.delete)
     elif options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
-        msgparse(recipient, sys.stdin.read())
+        logging.info("Processing message for hardcoded recipient %s" % \
+                     options.recipient)
+        msgparse(options.recipient, sys.stdin.read())
     elif options.process:
         # The inbox is where we expect to read messages from.
         inbox = mailbox.Maildir(config.get('paths', 'maildir'))
@@ -1156,6 +1174,7 @@ if (__name__ == "__main__"):
     (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
     userconf = UpdateUser()
+    posting = Posting()
     init_config()
     # Logging comes after config as we need config to define the loglevel and
     # log path.  Chicken and egg foo.
