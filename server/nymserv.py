@@ -727,7 +727,7 @@ def process_config(result, payload):
             log(501, "%s: File doesn't exist." % userconf)
     # user_update creates a new dict of keys that need to be created or changed
     # in the master userconf dict.
-    moddict = userconf.make_moddict(payload)
+    moddict = updusr.make_moddict(payload)
     # Does the mod request include a Delete statement?
     if 'delete' in moddict and moddict['delete'].lower() == 'yes':
         logmessage  = sigfor + ": Starting delete process "
@@ -1173,7 +1173,7 @@ if (__name__ == "__main__"):
     # .nymservrc file.
     (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
-    userconf = UpdateUser()
+    updusr = UpdateUser()
     posting = Posting()
     init_config()
     # Logging comes after config as we need config to define the loglevel and
