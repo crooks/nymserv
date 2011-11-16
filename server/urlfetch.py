@@ -15,6 +15,7 @@
 # for more details.
 
 from urllib2 import Request, urlopen, URLError
+from httplib import InvalidURL
 
 def geturl(url):
     user_agent =  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
@@ -34,12 +35,14 @@ def geturl(url):
             return 201, "Could not fetch %s. Got: %s" % (url, e.reason), None
         elif hasattr(e, 'code'):
             return 201, "Could not fetch %s: %d error" % (url, e.code), None
+    except InvalidURL, e:
+        return 201, "Invalid URL: %s. Reason: %s" % (url, e), None
     return 001, f.read(), ct
 
 def main():
-    url = "http://www.is-not-my.name"
+    url = "http://www.is-not-my.name:"
     rc, content, type = geturl(url)
-    print type
+    print content
 
 # Call main function.
 if (__name__ == "__main__"):
