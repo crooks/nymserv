@@ -98,14 +98,13 @@ class Posting():
         """
         # A full hex hSub is 80 hex digits. It's trimmed to match the length of
         # other systems, such as eSub.
-        hsublen = config.getint('hsub', 'length')
         mid = strutils.messageid(config.get('domains', 'default'))
         message  = "Path: %s\n" % config.get('nntp', 'path')
         message += "From: %s\n" % config.get('nntp', 'from')
         if 'hsub' in conf and conf['hsub']:
             # We use an hsub if we've been passed one.
             logging.debug("Generating hSub using key: " + conf['hsub'])
-            hash = hsub.hash(conf['hsub'], hsublen)
+            hash = hsub.hash(conf['hsub'])
             message += "Subject: " + hash + '\n'
             logging.debug("Generated a real hSub: " + hash)
         elif 'subject' in conf and conf['subject']:
@@ -117,6 +116,7 @@ class Posting():
             # We have to half the hsublen because we want the return in Hex
             # where each byte takes 2 digits.  To be safe, fetch too much
             # entropy and then trim it to size.
+            hsublen = config.getint('hsub', 'length')
             randbytes = int(hsublen / 2 + 1)
             hash = hsub.cryptorandom(randbytes).encode('hex')
             hash = hash[:hsublen]
@@ -1179,7 +1179,7 @@ if (__name__ == "__main__"):
     # Logging comes after config as we need config to define the loglevel and
     # log path.  Chicken and egg foo.
     init_logging()
-    hsub = hsub.HSub()
+    hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnupgStatParse()
     main()
