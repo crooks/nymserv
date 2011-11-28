@@ -20,21 +20,27 @@ from os import urandom
 class HSub():
     def __init__(self, trimchars = 48, ivchars = 8):
         # The length in Bytes of the IV
-        self.ivchars = ivchars
         self.trimchars = trimchars
+        self.ivchars = ivchars
 
-    def hash(self, secret, iv = None):
+    def hash(self, secret, iv = None, length = None):
         """Create an hSub (Hashed Subject). This is constructed as:
-        ----------------------------------------
-        | 64bit iv | 256bit SHA2 'iv + secret' |
-        ----------------------------------------
+        ----------------------------------
+        | iv | 256bit SHA2 'iv + secret' |
+        ----------------------------------
+        In all known implementations, iv=64 bits
+        The hSub may be trimmed to "length".  By default this is
+        currently 48 chars in order to match eSub.
         
         """
-        # Generate a 64bit random IV if none is provided.
-        if iv is None: iv = self.cryptorandom(self.ivchars)
+        # Generate a random IV if none is provided.
+        if iv is None:
+            iv = self.cryptorandom(self.ivchars)
+        if length is None:
+            length = self.trimchars
         # Concatenate our IV with a SHA256 hash of text + IV.
         hsub = iv + sha256(iv + secret).digest()
-        return hsub.encode('hex')[:self.trimchars]
+        return hsub.encode('hex')[:length]
 
     def check(self, secret, hsub):
         """Create an hSub using a known iv, (stripped from a passed hSub).  If
@@ -42,18 +48,12 @@ class HSub():
         us.
         
         """
-        # We are prepared to check variable length hsubs within boundaries.
-        # The low bound is the current Type-I esub length.  The high bound
-        # is the 256 bits of SHA2-256 + the IV bit length.
-        hsublen = len(hsub)
-        # 48 digits = 192 bit hsub, the smallest we allow.
-        # 80 digits = 320 bit hsub, the full length of SHA256 + 64 bit IV
-        if hsublen < 48 or hsublen > self.trimchars: return False
         iv = self.hexiv(hsub)
-        if not iv: return False
+        if not iv:
+            return False
         # Return True if our generated hSub collides with the supplied
         # sample.
-        return self.hash(secret, iv) == hsub
+        return self.hash(secret, iv, len(hsub)) == hsub
 
     def cryptorandom(self, numbytes):
         """Return a string of random bytes.
@@ -68,8 +68,6 @@ class HSub():
         """
         # Hex digits are twice the Byte length
         digits = self.ivchars * 2
-        # We don't want to process IVs of inadequate length.
-        if len(hsub) < digits: return False
         try:
             iv = hsub[:digits].decode('hex')
         except TypeError:
@@ -82,14 +80,15 @@ def main():
     using the same input text.
     
     """
-    hsub = HSub()
-    passphrase = "Pass phrase"
+    hsub = HSub(48, 8)
+    passphrase = "passphrase"
     sub = hsub.hash(passphrase)
     iv = hsub.hexiv(sub)
     print "Passphrase: " + passphrase
     print "IV:   %s" % iv.encode('hex')
     print "hsub: " + sub
     print "hsub length: %d bytes" % len(sub)
+    print "iv length: %d bytes" % len(iv)
     print "Should return True:  %s" % hsub.check(passphrase, sub)
     print "Should return False: %s" % hsub.check('false', sub)
 
