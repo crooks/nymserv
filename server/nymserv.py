@@ -442,6 +442,43 @@ def getuidmails(uidmails):
             gooduids.append(uid)
     return gooduids
 
+def process_mailbox():
+    """Parse a Maildir and pass each identified message to the Nymserver for
+    processing.  Failed messages will be stored in a held queue.
+
+    """
+    # The inbox is where we expect to read messages from.
+    inbox = mailbox.Maildir(config.get('paths', 'maildir'))
+    # After reading from inbox, failed messages are written to held.
+    held = mailbox.Maildir(config.get('paths', 'held'))
+    logging.info("Beginning mailbox processing")
+    allcnt = 0 # Total messags parsed
+    goodcnt = 0 # Successfully processed count
+    badcnt = 0 # Failed and held count
+    for key in inbox.iterkeys():
+        message = inbox.get_string(key)
+        recipient = ascertain_recipient(message)
+        allcnt += 1
+        if recipient is None:
+            processed = False
+            badcnt += 1
+        else:
+            processed = msgparse(recipient, message)
+            goodcnt += 1
+        if not processed:
+            heldkey = held.add(message)
+            logmes = "Message processing failed.  Saving as %s" % heldkey
+            logging.warn(logmes)
+        # We discard the message from inbox, regardless of whether it was
+        # successfully processed, otherwise we'll keep retrying it.
+        inbox.discard(key)
+        logging.debug("Deleted %s from mailq" % key)
+    logmes = "Mailbox processing completed. "
+    logmes += "%s of %s successful." % (goodcnt, allcnt)
+    if badcnt > 0:
+        logmes += " %s failed and held." % badcnt
+    logging.info(logmes)
+
 def ascertain_recipient(message):
     """This function attempts to work out who the recipient of a message is.
     Not as easy as it sounds!  Postfix appends an X-Original-To header
@@ -468,7 +505,7 @@ def ascertain_recipient(message):
             logging.info("Extracted valid recipient: %s" % recipient)
             return recipient
         else:
-            logging.info("Invalid recipient: %s" % recipient)
+            logging.info("Unwanted recipient: %s" % recipient)
             continue
         # When we encounter an empty line, it's the end of the header section.
         if not line:
@@ -1146,26 +1183,7 @@ def main():
                      options.recipient)
         msgparse(options.recipient, sys.stdin.read())
     elif options.process:
-        # The inbox is where we expect to read messages from.
-        inbox = mailbox.Maildir(config.get('paths', 'maildir'))
-        # After reading from inbox, failed messages are written to held.
-        held = mailbox.Maildir(config.get('paths', 'held'))
-        for key in inbox.iterkeys():
-            message = inbox.get_string(key)
-            recipient = ascertain_recipient(message)
-            if recipient is None:
-                processed = False
-            else:
-                processed = msgparse(recipient, message)
-            if not processed:
-                heldkey = held.add(message)
-                logmes = "Message processing failed.  Saving as %s" % heldkey
-                logging.warn(logmes)
-            # We discard the message from inbox, regardless of whether it was
-            # successfully processed, otherwise we'll keep retrying it.
-            inbox.discard(key)
-            logging.debug("Deleted %s from mailq" % key)
-        logging.debug("Mailbox processing completed")
+        process_mailbox()
 
 # Call main function.
 if (__name__ == "__main__"):
