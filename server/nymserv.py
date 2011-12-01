@@ -996,11 +996,13 @@ def process_url(payload):
         if urlopt == "hsub":
             hsubhash = urlval
     if len(urls) == 0:
-        log(301, "No URL's to retrieve.")
+        logging.info("No URL's to retrieve.")
+        return True
     # We cannot proceed without a Symmetric Key.  Posting plain-text to
     # a.a.m is not a good idea.
     if not key:
-        log(301, "No symmetric key specified.")
+        logging.info("No symmetric key specified.")
+        return True
     if not hsubhash:
         logging.debug("No hSub specified, setting to KEY.")
         hsubhash = key
@@ -1019,7 +1021,7 @@ def process_url(payload):
         # plain-text error message, not the html content we were
         # expecting but didn't get.
         if rc >= 100:
-            log(rc, message)
+            logging.info(message)
             url_part = MIMEText(message, 'plain')
             url_part['Content-Description'] = url
             url_msg.attach(url_part)
@@ -1086,6 +1088,7 @@ def process_url(payload):
     mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
     mime_msg += url_msg.as_string() + '\n'
     posting.post_symmetric_message(mime_msg, hsubhash, key)
+    return True
 
 def delete_nym(email, userconf):
     # First we make an in-memory copy of the user conf as we're about to delete
