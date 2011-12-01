@@ -563,13 +563,14 @@ def msgparse(recipient, message):
         logmes = "No decrypted payload, probably spam. "
         logmes += "Result was:\n%s" % result
         logging.info(logmes)
+        processed = True
     elif rlocal == 'config':
-        process_config(result, payload)
+        processed = process_config(result, payload)
     elif rlocal == "send":
-        process_send(result, payload)
+        processed = process_send(result, payload)
     elif rlocal == 'url':
-        process_url(payload)
-    return True
+        processed = process_url(payload)
+    return processed
 
 def process_config(result, payload):
     sigstat = gpgparse.statparse(result)
@@ -586,7 +587,8 @@ def process_config(result, payload):
         if 'uidmail' not in sigstat:
             # No good having a signed message without an email address.
             logmes = "No email addresses on key: %(keyid)s." % sigstat
-            log(301, logmes)
+            logging.warn(logmes)
+            return False
         # We pass the last check so there are email uid's on the signature.
         # Let's now check if any of them are for our domains.
         uids = getuidmails(sigstat['uidmail'])
@@ -595,13 +597,15 @@ def process_config(result, payload):
             # TODO There should be a return message to the key owner.
             logmes = "%(keyid)s: Ambiguous key. " % sigstat
             logmes += "Multiple uid matches."
-            log(401, logmes)
+            logging.warn(logmes)
+            return False
         elif len(uids) < 1:
             # We need a valid email address for the nym to receive email.
             # TODO There should be a return message to the key owner.
             logmes = "%(keyid)s: Key contains no uids for our " % sigstat
             logmes += "domains."
-            log(401, logmes)
+            logging.warn(logmes)
+            return False
         else:
             # This is what we require.  Just a single, valid uid for one of
             # our recognized domains.
@@ -615,7 +619,8 @@ def process_config(result, payload):
                 logmes = "%(keyid)s Signed key but without " % sigstat
                 logmes += "fingerprint. Status reported was:\n"
                 logmes += result
-                log(501, logmes)
+                logging.error(logmes)
+                return False
     else:
         # Decrypted a payload but it's unsigned. This could be a new Nym
         # request.  We have to assume so for now.
@@ -637,17 +642,22 @@ def process_config(result, payload):
         # Here we check how many keys were imported. Only one is
         # considered valid.
         if 'imported' not in testimpstat:
-            log(501, "No 'imported' returned by importstat.")
+            logging.error("No 'imported' returned by importstat.")
+            return False
         elif testimpstat['imported'] > 1:
             logmes = "%(imported)s keys imported. " % testimpstat
             logmes += "We don't allow more than one."
-            log(401, logmes)
+            logging.warn(logmes)
+            return False
         elif testimpstat['imported'] == 1:
             logmes = "Imported key %(keyid)s has a single UID. " % testimpstat
             logmes += "Excellent! Proceeding with import process."
             logging.info(logmes)
         else:
-            log(301, "No keys imported.")
+            logmes = "We got an unanticipated return from an attempted key "
+            logmes += "import.  The GnuPG status was:\n%s" % result
+            logging.error(logmes)
+            return False
         # By now we know a single key was imported, but how many valid
         # uids are on it?
         uids = getuidmails(testimpstat['uidmail'])
@@ -660,10 +670,14 @@ def process_config(result, payload):
             logmes = "More than one valid uid on %(keyid)s. " % testimpstat
             logmes = "We can't allow that as each key must have a single "
             logmes = "unique identifier."
-            log(301, logmes)
+            logging.warn(logmes)
+            return False
         else:
             # We didn't get any valid uids.
-            log(301, "No valid uids on test imported key.")
+            logging.warn("No valid uids on test imported key.")
+            #TODO The return on this should be True but for now, False will
+            #     cause the message to be held for human validation.
+            return False
 
         # At this stage, we have imported a valid key on to a fake keyring and
         # verified it has a single UID for one of our domains. We know the
@@ -687,7 +701,8 @@ def process_config(result, payload):
             if fingerprint is None:
                 logmes = "Failed to obtain fingerprint for "
                 logmes += "%(keyid)s" % importstat
-                log(501, logmes)
+                logging.error(logmes)
+                return False
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
         # Simple check to ensure the nym isn't on the reserved list.
@@ -701,7 +716,8 @@ def process_config(result, payload):
             conf = {'fingerprint' : fingerprint}
             posting.post_message(res_message, conf)
             gnupg.delete_key(fingerprint)
-            log(301, "%s is a reserved Nym. Deleted key." % nym)
+            logging.info("%s is a reserved Nym. Deleted key." % nym)
+            return True
 
         userfile = os.path.join(config.get('paths', 'user'),
                                 sigfor + '.db')
@@ -716,7 +732,8 @@ def process_config(result, payload):
                 logmes = "%s: Fingerprints match, it's a key " % sigfor
                 logmes += "refresh.  We've already imported it, so no "
                 logmes += "further action is required."
-                log(301, logmes)
+                log(logmes)
+                return True
             else:
                 logging.info("It's a duplicate, not accepting it.")
                 dup_message = duplicate_message(importstat['keyid'], sigfor)
@@ -726,7 +743,8 @@ def process_config(result, payload):
                 gpg.delete_key(fingerprint)
                 logmes = "%s: Requested but already exists. " % sigfor
                 logmes += "Sent duplicate Nym message and deleted key."
-                log(301, logmes)
+                logging.info(logmes)
+                return True
 
         # If script execution gets here, we know we're dealing with an
         # accepted new Nym.
@@ -735,7 +753,8 @@ def process_config(result, payload):
         if os.path.isfile(userfile):
             # This should never happen.  We can't have an accepted new Nym
             # with an existing DB file.
-            log(501, "%s: File already exists." % userfile)
+            logging.error("%s: File already exists." % userfile)
+            return False
         logging.info('Creating user config file %s' % userfile)
         userconf = shelve.open(userfile)
         userconf['fingerprint'] = fingerprint
@@ -762,7 +781,8 @@ def process_config(result, payload):
         else:
             # In theory this can't happen.  We can't be modifying a Nym that
             # doesn't already have a config file.
-            log(501, "%s: File doesn't exist." % userconf)
+            logging.error("%s: File doesn't exist." % userconf)
+            return False
     # user_update creates a new dict of keys that need to be created or changed
     # in the master userconf dict.
     moddict = updusr.make_moddict(payload)
@@ -772,7 +792,8 @@ def process_config(result, payload):
         logmessage += "at user request."
         logging.info(logmessage)
         delete_nym(sigfor, userconf)
-        log(301, "%s: Nym has been deleted." % sigfor)
+        logging.info("%s: Nym has been deleted." % sigfor)
+        return True
     modified = False
     for key in moddict:
         # The following condition only dictates which logmessage to
@@ -804,7 +825,7 @@ def process_config(result, payload):
         logging.debug("Created modify reply message")
     posting.post_message(reply_message, userconf)
     userconf.close()
-    sys.exit(0)
+    return True
 
 def process_send(result, payload):
     logging.debug('Message received for forwarding.')
