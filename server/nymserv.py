@@ -153,7 +153,8 @@ class Posting():
         mid, headers  = self.news_headers(conf)
         if not 'fingerprint' in conf:
             conf.close()
-            log(501, 'User shelve contains no fingerprint key.')
+            logging.error('User shelve contains no fingerprint key.')
+            return False
         recipient = conf['fingerprint']
         # If Symmetric encryption is specified, we don't need to throw the
         # Keyid during Asymmetric encryption.
@@ -426,7 +427,7 @@ def email_message(sender_email, recipient_string, message):
         except:
             logmessage  = 'Sending email to ' + addy
             logmessage += ' failed with error %s.' % sys.exc_info()[1]
-            log(201, logmessage)
+            logging.info(logmessage)
     server.quit()
 
 def getuidmails(uidmails):
@@ -732,7 +733,7 @@ def process_config(result, payload):
                 logmes = "%s: Fingerprints match, it's a key " % sigfor
                 logmes += "refresh.  We've already imported it, so no "
                 logmes += "further action is required."
-                log(logmes)
+                logging.info(logmes)
                 return True
             else:
                 logging.info("It's a duplicate, not accepting it.")
@@ -832,14 +833,16 @@ def process_send(result, payload):
     # We send messages for Nymholders after verifying their signature.
     sigstat = gpgparse.statparse(result)
     if 'goodsig' not in sigstat or not sigstat['goodsig']:
-        log(301, "Only verified signatures can send messages.")
+        logging.info("Only verified signatures can send messages.")
+        return True
     if 'uidmail' not in sigstat:
         # No good having a signed message without an email address.
         logmes = "We verified a signature, meaning we accepted is once, but "
         logmes += "it has no valid email uids for our domains. This requires "
         logmes += "some manual investigation. GnuPG status was:-\n"
         logmes += "%s\n" % result
-        log(501, logmes)
+        logging.error(logmes)
+        return False
     # There are uids on the gpg status, we have a signed message.
     uids = getuidmails(sigstat['uidmail'])
     if len(uids) > 1:
@@ -848,14 +851,16 @@ def process_send(result, payload):
         logmes += "validated this key with only a single valid uid. Now it "
         logmes += "has %s.  GnuPG status was:-\n" % len(uids)
         logmes += "%s\n" % result
-        log(501, logmes)
+        logging.error(logmes)
+        return False
     elif len(uids) < 1:
         # We need a valid email address for the nym to receive email.
         logmes = "Well this shouldn't happen! During nym creation we "
         logmes += "validated this key with a valid uid. Now it "
         logmes += "doesn't have one.  GnuPG status was:-\n"
         logmes += "%s\n" % result
-        log(501, logmes)
+        logging.error(logmes)
+        return False
     else:
         # This is what we require.  Just a single, valid uid for one of
         # our recognized domains.
@@ -867,7 +872,8 @@ def process_send(result, payload):
             logmes = "%(keyid)s Signed key but without " % sigstat
             logmes += "fingerprint. Status reported was:\n"
             logmes += "%s\n" % result
-            log(501, logmes)
+            logging.error(logmes)
+            return False
         else:
             fingerprint = sigstat['fingerprint']
 
@@ -900,10 +906,13 @@ def process_send(result, payload):
     if os.path.exists(userfile):
         userconf = shelve.open(userfile)
     else:
-        log(501, userfile + ': File not found.')
+        logging.error(userfile + ': File not found.')
+        return False
     # Reject sending if block_sends is defined and true
     if 'block_sends' in userconf and userconf['block_sends']:
-        log(301, nym_email + ': Sending email is blocked')
+        logging.info(nym_email + ': Sending email is blocked')
+        #TODO Change this return to True after (if ever) it's proven.
+        return False
     if not 'Subject' in send_msg:
         logging.debug('No Subject on message, creating a dummy.')
         send_msg['Subject'] = 'No Subject'
@@ -912,7 +921,8 @@ def process_send(result, payload):
         err_message = send_no_recipient_message(sigfor, send_msg['Subject'])
         posting.post_message(err_message, userconf)
         userconf.close()
-        log(301, 'No recipient specified in To header.')
+        logging.info('No recipient specified in To header.')
+        return True
     # If we receive a Message-ID, use it, otherwise generate one.
     if 'Message-ID' in send_msg:
         logging.debug('Using provided Message-ID')
@@ -1113,29 +1123,8 @@ def delete_nym(email, userconf):
     posting.post_message(del_message, memcopy)
     logging.info('%(fingerprint)s: Deleting from keyring.' % memcopy)
     gpg.delete_key(memcopy['fingerprint'])
-    log(301, 'Deletion process complete.')
-
-def log(rc, desc):
-    """Reporting and aborting function."""
-    # 0xx   Success, no message
-    # 1xx   Success, debug message
-    # 2xx   Success, info message
-    # 3xx   Exit, Info message
-    # 4xx   Abort, Warn message
-    # 5xx   Abort, Error message
-    if rc >= 100 and rc < 200:
-        logging.debug(desc)
-    if rc >= 200 and rc < 300:
-        logging.info(desc)
-    if rc >= 300 and rc < 400:
-        logging.info(desc + ' Exiting')
-        sys.exit(rc)
-    if rc >= 400 and rc < 500:
-        logging.warn(desc + ' Aborting')
-        sys.exit(rc)
-    if rc >=500 and rc < 600:
-        logging.error(desc + ' Aborting')
-        sys.exit(rc)
+    logging.info('Deletion process complete.')
+    return True
 
 def stdout_user(user):
     """Respond to a --list <email> request with a list of configuration
