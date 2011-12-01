@@ -562,13 +562,14 @@ def msgparse(recipient, message):
         # Simple bailout, we need some decrypted payload to continue.
         logmes = "No decrypted payload, probably spam. "
         logmes += "Result was:\n%s" % result
-        log(301, logmes)
-    if rlocal == 'config':
+        logging.info(logmes)
+    elif rlocal == 'config':
         process_config(result, payload)
     elif rlocal == "send":
         process_send(result, payload)
     elif rlocal == 'url':
         process_url(payload)
+    return True
 
 def process_config(result, payload):
     sigstat = gpgparse.statparse(result)
@@ -946,7 +947,6 @@ def process_send(result, payload):
         logmes += ' re-enables it.'
         logging.warn(logmes)
     userconf.close()
-    sys.exit(0)
 
 def process_url(payload):
     logging.debug('Received message requesting a URL.')
@@ -1065,7 +1065,6 @@ def process_url(payload):
     mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
     mime_msg += url_msg.as_string() + '\n'
     posting.post_symmetric_message(mime_msg, hsubhash, key)
-    sys.exit(0)
 
 def delete_nym(email, userconf):
     # First we make an in-memory copy of the user conf as we're about to delete
