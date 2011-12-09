@@ -465,8 +465,9 @@ def process_mailbox():
             badcnt += 1
         else:
             processed = msgparse(recipient, message)
-            goodcnt += 1
-        if not processed:
+        if processed:
+                goodcnt += 1
+        else:
             heldkey = held.add(message)
             logmes = "Message processing failed.  Saving as %s" % heldkey
             logging.warn(logmes)
