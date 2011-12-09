@@ -979,6 +979,7 @@ def process_send(result, payload):
         logmes += ' re-enables it.'
         logging.warn(logmes)
     userconf.close()
+    return True
 
 def process_url(payload):
     logging.debug('Received message requesting a URL.')
