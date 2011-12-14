@@ -31,11 +31,12 @@ import sys
 
 LOGLEVEL = 'info'
 HOMEDIR = os.path.expanduser('~')
-LOGPATH = os.path.join(HOMEDIR, 'log')
+CRYPT = '/crypt/var/nymserv'
+LOGPATH = os.path.join(CRYPT, 'log')
 PIDPATH = os.path.join(HOMEDIR, 'run')
-ETCPATH = os.path.join(HOMEDIR, 'etc')
+ETCPATH = os.path.join(CRYPT, 'etc')
 TMPPATH = os.path.join(HOMEDIR, 'tmp')
-POOLPATH = os.path.join(HOMEDIR, 'pool')
+POOLPATH = os.path.join(CRYPT, 'pool')
 
 class MyDaemon(Daemon):
     def run(self):
