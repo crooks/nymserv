@@ -34,7 +34,7 @@ HOMEDIR = os.path.expanduser('~')
 CRYPT = '/crypt/var/nymserv'
 LOGPATH = os.path.join(CRYPT, 'log')
 PIDPATH = os.path.join(HOMEDIR, 'run')
-ETCPATH = os.path.join(CRYPT, 'etc')
+ETCPATH = os.path.join(HOMEDIR, 'etc')
 TMPPATH = os.path.join(HOMEDIR, 'tmp')
 POOLPATH = os.path.join(CRYPT, 'pool')
 
