@@ -17,26 +17,270 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-import re
-import email
-import logging
-import mailbox
-import os.path
-import sys
-import shelve
-import smtplib
-import email.utils
-import ConfigParser
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
-from email.mime.application import MIMEApplication
+from email.parser import Parser
 from optparse import OptionParser
+from strutils import file2list
+from time import sleep
+import ConfigParser
+import cStringIO
+import email
+import email.utils
+import logging
+import mailbox as mbx
+import nntplib
+import os
+import os.path
+import re
+import shelve
+import smtplib
+import socket
+import sys
 # My libraries
+from daemon import Daemon
 import gnupg
 import hsub
 import urlfetch
 import strutils
+
+class MyDaemon(Daemon):
+    def run(self):
+        while True:
+            mailbox.process()
+            pool.process()
+            sleep(3600)
+
+class Pool:
+    def __init__(self, etcpath, poolpath):
+        socket.setdefaulttimeout(10)
+        hostfile = os.path.join(etcpath, 'newsservers')
+        if not os.path.isfile(hostfile):
+            logging.error('%s: Peers file does not exist' % hostfile)
+            sys.exit(1)
+        self.hosts = file2list(hostfile)
+        if len(self.hosts) == 0:
+            logging.error('No news peers defined.')
+            sys.exit(1)
+        self.poolpath = poolpath
+
+    def listdir(self, path):
+        """Return a list of files in the Pool dir."""
+        if os.path.isdir(path):
+            return os.listdir(path)
+        else:
+            logging.error('%s: Pool directory does not exist' % path)
+            sys.exit(1)
+
+    def connect_peers(self):
+        peers = {}
+        # Establish connections with all of our newsservers
+        for host in self.hosts:
+            logging.debug('Connecting to %s' % host)
+            try:
+                peers[host] = nntplib.NNTP(host)
+                #peers[host].set_debuglevel(2)
+                logging.debug('%s: Connection established' % host)
+            except socket.gaierror, e:
+                logging.warn('%s: Connection error: %s' % (host, e))
+            except:
+                logging.warn('Untrapped error during connect to %s' % host)
+        return peers
+
+    def process(self):
+        """Produce a list of files in the pool and perform some basic checks
+        on the configured Usenet peers.  If all is good, pass the list of
+        files to the post_files routine.
+
+        """
+        pool_files = self.listdir(self.poolpath)
+        # If the pool has no files in it, we don't need to do anything.
+        num_pool_files = len(pool_files)
+        if num_pool_files == 0:
+            logging.info('No files in pool to process so no action required.')
+        else:
+            logging.info('Processing %s pool files' % num_pool_files)
+            peers = self.connect_peers()
+            # If there are no host connections, log it and give up.
+            if len(peers) == 0:
+                logmes  = 'All %s peer connections' % len(self.hosts)
+                logmes += ' failed. Check Internet connection, it might be dead.'
+                logging.warn(logmes)
+            else:
+                self.post_files(peers, pool_files)
+
+    def post_files(self, peers, pool_files):
+        """Attempt tp post a list of files handed to us by process().
+
+        """
+        # Iterate through all the files in the pool
+        for filename in pool_files:
+             # Bool set to true if any newsserver accepts the post
+            success = False
+            # Create a fully-qualified filename to avoid any confusion
+            fqname = os.path.join(self.poolpath, filename)
+            f = open(fqname, 'r')
+
+            # We need to parse the message headers to find out what the
+            # Message-ID is.  Also, in some cases we need to rewrite headers
+            # for anonymity purposes.
+            msg = Parser().parse(f, 'headersonly')
+            f.close()
+            # For anonymity purposes, we want to create dates at injection
+            # time, not at creation time.  Otherwise there's no point in
+            # batching delivery.
+            if filename.startswith('a'):
+                # Lowercase 'a' means anonymous and we need to massage some
+                # headers to prevent giving away clues.
+                logging.debug('Adjusting linkable headers')
+                d = email.utils.formatdate()
+                if 'Date' in msg:
+                    logging.debug('Deleting Date header: %s' % msg['Date'])
+                    del msg['Date']
+                logging.debug('Inserting Date header: %s' % d)
+                msg['Date'] = d
+                if 'Injection-Date' in msg:
+                    logmes = 'Deleting Injection-Date header:'
+                    logmes += ' %s' % msg['Injection-Date']
+                    logging.debug(logmes)
+                    del msg['Injection-Date']
+                logging.debug('Inserting Injection-Date header: %s' % d)
+                msg['Injection-Date'] = d
+            # Here we extract the Message-ID so we can offer it to our news
+            # peers during IHAVE.
+            if 'Message-ID' in msg:
+                mid = msg['Message-ID']
+                logging.debug('%s: Contains Message-ID: %s' % (filename, mid))
+            else:
+                logmes = '%s: Contains no Message-ID. Skipping.' % filename
+                logging.warn(logmes)
+                continue
+
+            o = cStringIO.StringIO()
+            logging.debug('Attempting to post %s.' % filename)
+            o.write(msg.as_string())
+            # Now we offer the message to our peers and hope at least one
+            # accepts.
+            for host in peers:
+                o.seek(0) # Start from the beginning of our file
+                try:
+                    peers[host].ihave(mid, o)
+                    success = True
+                    logging.debug('%s: Accepted %s' % (host, mid))
+                except nntplib.NNTPTemporaryError:
+                    message = '%s: IHAVE returned a temporary error: ' % host
+                    message += '%s.' % sys.exc_info()[1]
+                    logging.info(message)
+                except nntplib.NNTPPermanentError:
+                    message = '%s: IHAVE returned a permanent error: ' % host
+                    message += '%s.' % sys.exc_info()[1]
+                    logging.warn(message)
+                except:
+                    message = 'IHAVE returned an unknown error: '
+                    message += '%s.' % sys.exc_info()[1]
+                    logging.warn(message)
+            # Close the file object
+            o.close()
+
+            # Check the success flag.  If True we can delete the file from the
+            # pool.  If not, log it.
+            if success:
+                os.remove(fqname)
+                logging.info('%s: Posted and deleted from pool' % filename)
+            else:
+                logging.warn('%s: Not accepted. Retaining in pool' % filename)
+
+        # Finally close the connections to our peers.
+        for host in peers:
+            try:
+                peers[host].quit()
+                logging.debug('%s: Connection Closed' % host)
+            except socket.error, e:
+                logmes = '%s: Cannot close connection. ' % host
+                logmes += 'Socket Error: %s' % e
+                logging.warn(logmes)
+        # Processing completed normally.
+
+class Mailbox():
+    def process(self):
+        """Parse a Maildir and pass each identified message to the Nymserver
+        for processing.  Failed messages will be stored in a held queue.
+
+        """
+        # The inbox is where we expect to read messages from.
+        inbox = mbx.Maildir(config.get('paths', 'maildir'))
+        # After reading from inbox, failed messages are written to held.
+        held = mbx.Maildir(config.get('paths', 'held'))
+        logging.info("Beginning mailbox processing")
+        allcnt = 0 # Total messags parsed
+        goodcnt = 0 # Successfully processed count
+        badcnt = 0 # Failed and held count
+        for key in inbox.iterkeys():
+            message = inbox.get_string(key)
+            recipient = self.ascertain_recipient(message)
+            allcnt += 1
+            if recipient is None:
+                processed = False
+                badcnt += 1
+            else:
+                processed = msgparse(recipient, message)
+            if processed:
+                    goodcnt += 1
+            else:
+                heldkey = held.add(message)
+                logmes = "Message processing failed.  Saving as %s" % heldkey
+                logging.warn(logmes)
+            # We discard the message from inbox, regardless of whether it was
+            # successfully processed, otherwise we'll keep retrying it.
+            inbox.discard(key)
+            logging.debug("Deleted %s from mailq" % key)
+        logmes = "Mailbox processing completed. "
+        logmes += "%s of %s successful." % (goodcnt, allcnt)
+        if badcnt > 0:
+            logmes += " %s failed and held." % badcnt
+        logging.info(logmes)
+
+    def ascertain_recipient(self, message):
+        """This function attempts to work out who the recipient of a message
+        is.  Not as easy as it sounds!  Postfix appends an X-Original-To
+        header containing this info but there's no guarantee of its uniqueness
+        as other systems (such as mailing lists) also append the same header.
+        Consequently it's necessary to parse the whole header in search of an
+        X-Original-To matching the domains the Nymserver processes.
+
+        """
+        doms = config.get('domains', 'hosted')
+        msglines = message.split("\n")
+        for line in msglines:
+            if not line.startswith("X-Original-To: "):
+                continue
+            # Strip the header from its content.
+            recipient = line.split(": ", 1)[1]
+            # Hopefully the content is an email address.
+            if not '@' in recipient:
+                logging.info("Invalid recipient found: %s" % recipient)
+                continue
+            # Split the email address and validate the domain.
+            domain = recipient.split("@", 1)[1]
+            if domain in doms:
+                logging.info("Extracted valid recipient: %s" % recipient)
+                return recipient
+            else:
+                logging.info("Unwanted recipient: %s" % recipient)
+                continue
+            # When we encounter an empty line, it's the end of the header section.
+            if not line:
+                logmes = "We got a message with no ascertainable recipient "
+                logmes += "for the Nymserver. This probably shouldn't happen."
+                logging.warn(logmes)
+                return None
+        logmes = "Unable to ascertain a recipient for this message. "
+        logmes += "End of message was reached without finding a recipient "
+        logmes += "or a blank line after the headers."
+        logging.warn(logmes)
+        return None
 
 class UpdateUser():
     def __init__(self):
@@ -199,7 +443,7 @@ def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
     logging.basicConfig(
-        filename=config.get('logging', 'file'),
+        filename=os.path.join(config.get('paths', 'logdir'), 'nym.log'),
         level = loglevels[config.get('logging', 'level')],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
@@ -220,6 +464,12 @@ def init_parser():
                       help = "Delete a user account and key")
     parser.add_option("--process", dest = "process", action = "store_true",
                       help = "Process a maildir (Experimental")
+    parser.add_option("--start", dest = "start", action = "store_true",
+                      help = "Start the Nymserver Daemon")
+    parser.add_option("--stop", dest = "stop", action = "store_true",
+                      help = "Stop the Nymserver Daemon")
+    parser.add_option("--restart", dest = "restart", action = "store_true",
+                      help = "Restart the Nymserver Daemon")
     return parser.parse_args()
 
 def init_config():
@@ -231,10 +481,11 @@ def init_config():
     config.set('paths', 'pool', os.path.join(homedir, 'pool'))
     config.set('paths', 'maildir', os.path.join(homedir, 'Maildir'))
     config.set('paths', 'held', os.path.join(homedir, 'Maildir', 'held'))
+    config.set('paths', 'piddir', os.path.join(homedir, 'run'))
+    config.set('paths', 'logdir', os.path.join(homedir, 'log'))
 
     # Logging
     config.add_section('logging')
-    config.set('logging', 'file', os.path.join(homedir, 'log', 'nym.log'))
     config.set('logging', 'level', 'info')
 
     # Config options for NNTP Posting
@@ -266,7 +517,9 @@ def init_config():
     # Try and process the .nymservrc file.  If it doesn't exist, we bailout
     # as some options are compulsory.
     if not options.rc:
-        configfile = os.path.join(homedir, '.nymservrc')
+        #configfile = os.path.join(homedir, '.nymservrc')
+        #TODO This shouldn't be the default but it makes my life easier!
+        configfile = os.path.join('/crypt/var/nymserv', '.nymservrc')
     else:
         configfile = options.rc
     if os.path.isfile(configfile):
@@ -442,84 +695,6 @@ def getuidmails(uidmails):
         if domain in doms:
             gooduids.append(uid)
     return gooduids
-
-def process_mailbox():
-    """Parse a Maildir and pass each identified message to the Nymserver for
-    processing.  Failed messages will be stored in a held queue.
-
-    """
-    # The inbox is where we expect to read messages from.
-    inbox = mailbox.Maildir(config.get('paths', 'maildir'))
-    # After reading from inbox, failed messages are written to held.
-    held = mailbox.Maildir(config.get('paths', 'held'))
-    logging.info("Beginning mailbox processing")
-    allcnt = 0 # Total messags parsed
-    goodcnt = 0 # Successfully processed count
-    badcnt = 0 # Failed and held count
-    for key in inbox.iterkeys():
-        message = inbox.get_string(key)
-        recipient = ascertain_recipient(message)
-        allcnt += 1
-        if recipient is None:
-            processed = False
-            badcnt += 1
-        else:
-            processed = msgparse(recipient, message)
-        if processed:
-                goodcnt += 1
-        else:
-            heldkey = held.add(message)
-            logmes = "Message processing failed.  Saving as %s" % heldkey
-            logging.warn(logmes)
-        # We discard the message from inbox, regardless of whether it was
-        # successfully processed, otherwise we'll keep retrying it.
-        inbox.discard(key)
-        logging.debug("Deleted %s from mailq" % key)
-    logmes = "Mailbox processing completed. "
-    logmes += "%s of %s successful." % (goodcnt, allcnt)
-    if badcnt > 0:
-        logmes += " %s failed and held." % badcnt
-    logging.info(logmes)
-
-def ascertain_recipient(message):
-    """This function attempts to work out who the recipient of a message is.
-    Not as easy as it sounds!  Postfix appends an X-Original-To header
-    containing this info but there's no guarantee of its uniqueness as other
-    systems (such as mailing lists) also append the same header.  Consequently
-    it's necessary to parse the whole header in search of an X-Original-To
-    matching the domains the Nymserver processes.
-
-    """
-    doms = config.get('domains', 'hosted')
-    msglines = message.split("\n")
-    for line in msglines:
-        if not line.startswith("X-Original-To: "):
-            continue
-        # Strip the header from its content.
-        recipient = line.split(": ", 1)[1]
-        # Hopefully the content is an email address.
-        if not '@' in recipient:
-            logging.info("Invalid recipient found: %s" % recipient)
-            continue
-        # Split the email address and validate the domain.
-        domain = recipient.split("@", 1)[1]
-        if domain in doms:
-            logging.info("Extracted valid recipient: %s" % recipient)
-            return recipient
-        else:
-            logging.info("Unwanted recipient: %s" % recipient)
-            continue
-        # When we encounter an empty line, it's the end of the header section.
-        if not line:
-            logmes = "We got a message with no ascertainable recipient "
-            logmes += "for the Nymserver. This probably shouldn't happen."
-            logging.warn(logmes)
-            return None
-    logmes = "Unable to ascertain a recipient for this message. "
-    logmes += "End of message was reached without finding a recipient "
-    logmes += "or a blank line after the headers."
-    logging.warn(logmes)
-    return None
 
 def msgparse(recipient, message):
     "Parse a received email."
@@ -1197,7 +1372,14 @@ def main():
                      options.recipient)
         msgparse(options.recipient, sys.stdin.read())
     elif options.process:
-        process_mailbox()
+        mailbox.process()
+        pool.process()
+    elif options.start:
+        daemon.start()
+    elif options.stop:
+        daemon.stop()
+    elif options.restart:
+        daemon.restart()
 
 # Call main function.
 if (__name__ == "__main__"):
@@ -1205,14 +1387,25 @@ if (__name__ == "__main__"):
     # .nymservrc file.
     (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
-    updusr = UpdateUser()
-    posting = Posting()
     init_config()
     # Logging comes after config as we need config to define the loglevel and
     # log path.  Chicken and egg foo.
     init_logging()
+    # Initialize the Daemon
+    daemon = MyDaemon(
+            os.path.join(config.get('paths', 'piddir'), 'nymserv.pid'),
+            '/dev/null',
+            '/dev/null',
+            os.path.join(config.get('paths', 'logdir'), 'error')
+            )
+    updusr = UpdateUser()
+    pool = Pool(config.get('paths', 'etc'),
+                config.get('paths', 'pool')
+               )
+    posting = Posting()
     hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnupgStatParse()
+    mailbox = Mailbox()
     main()
 
