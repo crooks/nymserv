@@ -53,7 +53,7 @@ class MyDaemon(Daemon):
             pool.process()
             sleep(3600)
 
-class Pool:
+class PoolPost:
     def __init__(self, etcpath, poolpath):
         socket.setdefaulttimeout(10)
         hostfile = os.path.join(etcpath, 'newsservers')
@@ -332,7 +332,7 @@ class UpdateUser():
                 moddict[field] = value
         return moddict
 
-class Posting():
+class PostPrep():
     def news_headers(self, conf):
         """For all messages inbound to a.a.m for a Nym, the headers are
         standard.  The only required info is whether to hSub the Subject. We
@@ -721,7 +721,7 @@ def msgparse(recipient, message):
             # but no corresponding user DB.
             logging.warn('%s: File not found.' % userfile)
             return False
-        posting.post_message(message, userconf)
+        postprep.post_message(message, userconf)
         if 'received' in userconf:
             userconf['received'] += 1
         else:
@@ -891,7 +891,7 @@ def process_config(result, payload):
             # In this instance there is no valid userconf shelve to read so we
             # create a false one to satisfy post_message().
             conf = {'fingerprint' : fingerprint}
-            posting.post_message(res_message, conf)
+            postprep.post_message(res_message, conf)
             gnupg.delete_key(fingerprint)
             logging.info("%s is a reserved Nym. Deleted key." % nym)
             return True
@@ -916,7 +916,7 @@ def process_config(result, payload):
                 dup_message = duplicate_message(importstat['keyid'], sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint' : fingerprint}
-                posting.post_message(dup_message, conf)
+                postprep.post_message(dup_message, conf)
                 gpg.delete_key(fingerprint)
                 logmes = "%s: Requested but already exists. " % sigfor
                 logmes += "Sent duplicate Nym message and deleted key."
@@ -1000,7 +1000,7 @@ def process_config(result, payload):
     else:
         reply_message = modify_success_message(userconf)
         logging.debug("Created modify reply message")
-    posting.post_message(reply_message, userconf)
+    postprep.post_message(reply_message, userconf)
     userconf.close()
     return True
 
@@ -1095,7 +1095,7 @@ def process_send(result, payload):
     # Check we actually have a recipient for the message
     if 'To' not in send_msg:
         err_message = send_no_recipient_message(sigfor, send_msg['Subject'])
-        posting.post_message(err_message, userconf)
+        postprep.post_message(err_message, userconf)
         userconf.close()
         logging.info('No recipient specified in To header.')
         return True
@@ -1122,7 +1122,7 @@ def process_send(result, payload):
     email_message(sigfor, recipients, send_msg)
     suc_message = send_success_message(send_msg)
     logging.info('Posting Send confirmation to ' + sigfor)
-    posting.post_message(suc_message, userconf)
+    postprep.post_message(suc_message, userconf)
     if 'sent' in userconf:
         userconf['sent'] += 1
     else:
@@ -1274,7 +1274,7 @@ def process_url(payload):
     # standard mail client like Mutt.
     mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
     mime_msg += url_msg.as_string() + '\n'
-    posting.post_symmetric_message(mime_msg, hsubhash, key)
+    postprep.post_symmetric_message(mime_msg, hsubhash, key)
     return True
 
 def delete_nym(email, userconf):
@@ -1297,7 +1297,7 @@ def delete_nym(email, userconf):
     # We have to post the delete message before we remove the key from the
     # keyring, otherwise we can't encrypt the message!
     del_message = delete_success_message(email)
-    posting.post_message(del_message, memcopy)
+    postprep.post_message(del_message, memcopy)
     logging.info('%(fingerprint)s: Deleting from keyring.' % memcopy)
     gpg.delete_key(memcopy['fingerprint'])
     logging.info('Deletion process complete.')
@@ -1399,10 +1399,10 @@ if (__name__ == "__main__"):
             os.path.join(config.get('paths', 'logdir'), 'error')
             )
     updusr = UpdateUser()
-    pool = Pool(config.get('paths', 'etc'),
-                config.get('paths', 'pool')
-               )
-    posting = Posting()
+    pool = PoolPost(config.get('paths', 'etc'),
+                    config.get('paths', 'pool')
+                   )
+    postprep = PostPrep()
     hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnupgStatParse()
