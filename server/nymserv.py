@@ -350,11 +350,11 @@ class PostPrep():
             logging.debug("Generating hSub using key: " + conf['hsub'])
             hash = hsub.hash(conf['hsub'])
             message += "Subject: " + hash + '\n'
-            logging.debug("Generated a real hSub: " + hash)
+            logging.info("Generated a real hSub: " + hash)
         elif 'subject' in conf and conf['subject']:
             # We're doing a plain-text Subject.
             message += "Subject: %s\n" % conf['subject']
-            logging.debug("Using plain-text subject: %s" % conf['subject'])
+            logging.info("Using plain-text subject: %s" % conf['subject'])
         else:
             # We're doing a fake hsub.
             # We have to half the hsublen because we want the return in Hex
@@ -365,7 +365,7 @@ class PostPrep():
             hash = hsub.cryptorandom(randbytes).encode('hex')
             hash = hash[:hsublen]
             message += "Subject: " + hash + "\n"
-            logging.debug("Fake hSub: " + hash)
+            logging.info("Fake hSub: " + hash)
         message += "Date: " + email.utils.formatdate() + "\n"
         message += "Message-ID: " + mid + "\n"
         message += "Newsgroups: %s\n" % config.get('nntp', 'newsgroups')
@@ -1383,7 +1383,7 @@ def main():
 
 # Call main function.
 if (__name__ == "__main__"):
-    # Paser before config in case someone wants to override the default
+    # Parser before config in case someone wants to override the default
     # .nymservrc file.
     (options, args) = init_parser()
     config = ConfigParser.RawConfigParser()
