@@ -1375,10 +1375,13 @@ def main():
         mailbox.process()
         pool.process()
     elif options.start:
+        logging.info("Daemon starting")
         daemon.start()
     elif options.stop:
+        logging.info("Daemon stopping")
         daemon.stop()
     elif options.restart:
+        logging.info("Daemon restarting")
         daemon.restart()
 
 # Call main function.
