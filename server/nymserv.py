@@ -293,7 +293,7 @@ class UpdateUser():
         # We ignore the next two fields to prevent warnings about MIME content.
         ignore_fields.append("content-type")
         ignore_fields.append("content-disposition")
-        self.confopt_re = re.compile('([\w\-]+?):\s+(.+)')
+        self.confopt_re = re.compile('([\w\-]+?):\s*(.+)')
         self.ignore_fields = ignore_fields
     
     def make_moddict(self, text):
@@ -1383,6 +1383,8 @@ def main():
     elif options.restart:
         logging.info("Daemon restarting")
         daemon.restart()
+    else:
+        sys.stdout.write("No command specified\n")
 
 # Call main function.
 if (__name__ == "__main__"):
