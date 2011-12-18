@@ -65,7 +65,12 @@ class GnupgFunctions(GnuPG):
         content = proc.handles['stdout'].read()
         proc.handles['logger'].close()
         proc.handles['stdout'].close()
-        proc.wait()
+        # We need to trap decrypt failures, otherwise execution aborts with
+        # a traceback, just because we can't decrypt a message.
+        try:
+            proc.wait()
+        except IOError, e:
+            pass
         return result, content
 
     def export(self, keyid):
@@ -511,7 +516,6 @@ class GnupgStatParse():
 def main():
     g = GnupgFunctions("/crypt/home/nymserv/keyring")
     gp = GnupgStatParse()
-    print g.fingerprint("52B94FBE")
 
 # Call main function.
 if (__name__ == "__main__"):
