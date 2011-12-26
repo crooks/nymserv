@@ -409,17 +409,26 @@ class PostPrep():
             logging.debug('No Symmetric encryption defined, throwing KeyID')
             throwkid = True
         logging.debug('Signing and Encrypting message for ' + recipient)
-        enc_payload = gpg.signcrypt(recipient,
+        result, enc_payload = gpg.signcrypt(recipient,
                                     config.get('pgp', 'key'),
                                     config.get('pgp', 'passphrase'),
                                     payload,
                                     throwkid)
-        # Symmetrically wrap the payload if we have a Symmetric password
-        # defined.
-        if 'symmetric' in conf and conf['symmetric']:
-            logging.debug('Adding Symmetric Encryption layer')
-            enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
-        self.pool_write(headers + '\n' + enc_payload)
+        if enc_payload:
+            # Symmetrically wrap the payload if we have a Symmetric password
+            # defined.
+            if 'symmetric' in conf and conf['symmetric']:
+                logging.debug('Adding Symmetric Encryption layer')
+                enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
+            self.pool_write(headers + '\n' + enc_payload)
+        elif result:
+            logmes = "GnuPG returned an error whilst attempting to signcrypt "
+            logmes += "a message.  The error was:\n%s" % result
+            logging.error(logmes)
+        else:
+            logmes = "GnuPG returned no payload or error during signcrypt. "
+            logmes = "The recipient was: %s" % recipient
+            logging.error(logmes)
 
     def pool_write(self, payload):
         """Write the received message (complete with headers) to the pool.  The

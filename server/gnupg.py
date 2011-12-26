@@ -246,6 +246,7 @@ class GnupgFunctions(GnuPG):
         self.options.armor = 1
         self.options.meta_interactive = 0
         self.options.always_trust = 1
+        self.options.homedir = self.keyring
         self.options.recipients = recipients
         self.options.default_key = senderkey
         self.options.extra_args = []
@@ -254,13 +255,19 @@ class GnupgFunctions(GnuPG):
             self.options.extra_args.append('--throw-keyid')
         self.passphrase = passphrase
         proc = self.run(['--encrypt', '--sign'], create_fhs=['stdin',
-                                                              'stdout'])
+                                                              'stdout',
+                                                              'logger'])
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
+        result = proc.handles['logger'].read()
         proc.handles['stdout'].close()
-        proc.wait()
-        return ciphertext
+        proc.handles['logger'].close()
+        try:
+            proc.wait()
+        except IOError, e:
+            return result, None
+        return result, ciphertext
 
 class GnupgStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the
@@ -514,7 +521,7 @@ class GnupgStatParse():
         return gpgstat
 
 def main():
-    g = GnupgFunctions("/crypt/home/nymserv/keyring")
+    g = GnupgFunctions("/crypt/var/nymserv/keyring")
     gp = GnupgStatParse()
 
 # Call main function.
