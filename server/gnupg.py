@@ -205,11 +205,11 @@ class GnupgFunctions(GnuPG):
         files.  To overcome this issue, I'm using tempfile to write the output
         to file instead of stdout."""
         temp = tempfile.TemporaryFile()
-        optlist = ['--cipher-algo', 'AES256']
         self.options.armor = 1
         self.options.meta_interactive = 0
         self.passphrase = passphrase
-        self.options.extra_args = optlist
+        self.options.recipients = []
+        self.options.extra_args = ['--cipher-algo', 'AES256']
         #self.options.extra_args.append('--no-version')
         proc = self.run(['--symmetric'], create_fhs=['stdin'],
                                          attach_fhs={'stdout': temp})
