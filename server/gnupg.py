@@ -16,7 +16,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-from GnuPGInterface import GnuPG
+import GnuPGInterface
 import re
 import tempfile
 import os.path
@@ -36,10 +36,11 @@ class GnupgError(Error):
         return repr(self.expr)
 
 # Superclass GnuPGInterface.GnuPG
-class GnupgFunctions(GnuPG):
+class GnuPGFunctions():
+    
     def __init__(self, keyring = None):
+        self.gnupg = GnuPGInterface.GnuPG()
         # Process our subclass __init__
-        GnuPG.__init__(self)
         if keyring is None:
             homedir = os.path.expanduser('~')
             keyring = os.path.join(homedir, '.gnupg')
@@ -47,16 +48,19 @@ class GnupgFunctions(GnuPG):
             raise GnupgError("Keyring directory not found.")
         self.keyring = keyring
 
+    def reset_options(self):
+        self.gnupg.options = GnuPGInterface.Options()
+
     def decrypt_verify(self, message, passphrase):
         """This function is unusual in that it returns 3 variables:
         Return Code, Result (Email if verified), Decrypted Payload."""
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.always_trust = 1
-        self.options.homedir = self.keyring
-        self.options.extra_args = ['--with-fingerprint']
-        self.passphrase = passphrase
-        proc = self.run(['--decrypt'], create_fhs=['stdin',
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.always_trust = 1
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = ['--with-fingerprint']
+        self.gnupg.passphrase = passphrase
+        proc = self.gnupg.run(['--decrypt'], create_fhs=['stdin',
                                                    'stdout',
                                                    'logger'])
         proc.handles['stdin'].write(message)
@@ -74,12 +78,12 @@ class GnupgFunctions(GnuPG):
         return result, content
 
     def export(self, keyid):
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
         idlist = []
         idlist.append(keyid)
-        proc = self.run(['--export'], args=idlist, create_fhs=['stdout',
+        proc = self.gnupg.run(['--export'], args=idlist, create_fhs=['stdout',
                                                                'logger'])
         result = proc.handles['logger'].read()
         key = proc.handles['stdout'].read()
@@ -91,13 +95,13 @@ class GnupgFunctions(GnuPG):
     def keyinfo(self, keyid):
         """Takes a single keyid and returns all the info from list-keys that
         relate to it. The related fingerprint is also returned."""
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
-        self.options.extra_args = ['--with-fingerprint']
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = ['--with-fingerprint']
         idlist = []
         idlist.append(keyid)
-        proc = self.run(['--list-keys'], args=idlist, create_fhs=['stdout'])
+        proc = self.gnupg.run(['--list-keys'], args=idlist, create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
         return result
@@ -106,11 +110,11 @@ class GnupgFunctions(GnuPG):
         """Return a single fingerprint in response to a keyid or email.
         If more than one fingerprint is return from the supplied criteria,
         None is returned.  This prevents potential ambiguity."""
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
         idlist = []
         idlist.append(keyid)
-        proc = self.run(['--fingerprint'], args=idlist, create_fhs=['stdout'])
+        proc = self.gnupg.run(['--fingerprint'], args=idlist, create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
         lines = result.split("\n")
@@ -131,11 +135,11 @@ class GnupgFunctions(GnuPG):
         """This is a kludge, but a useful one.  It returns a list of all the
         uid pulic email addresses on a keyring."""
         email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
-        self.options.extra_args = []
-        proc = self.run(['--list-keys'], create_fhs=['stdout'])
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = []
+        proc = self.gnupg.run(['--list-keys'], create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
         proc.wait()
@@ -155,12 +159,12 @@ class GnupgFunctions(GnuPG):
         """Delete a public key. Note: This doesn't return a status. It either
         succeeds or it errors.  Simples!"""
         #TODO Not tested this yet.
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
-        self.options.extra_args = []
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = []
         idlist = []
         idlist.append(keyid)
-        proc = self.run(['--delete-key'], args=idlist)
+        proc = self.gnupg.run(['--delete-key'], args=idlist)
         proc.wait()
 
     def import_key(self, key, dryrun = False):
@@ -173,14 +177,14 @@ class GnupgFunctions(GnuPG):
         keyfile.seek(0)
         filelist = []
         filelist.append(keyfile.name)
-        self.options.meta_interactive = 0
-        self.options.homedir = self.keyring
-        self.options.extra_args = ['--with-fingerprint']
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = ['--with-fingerprint']
         if dryrun:
-            self.options.extra_args.append('--no-default-keyring')
-            self.options.extra_args.append('--keyring')
-            self.options.extra_args.append('tmpring.gpg')
-        proc = self.run(['--import'], args=filelist, create_fhs=['logger'])
+            self.gnupg.options.extra_args.append('--no-default-keyring')
+            self.gnupg.options.extra_args.append('--keyring')
+            self.gnupg.options.extra_args.append('tmpring.gpg')
+        proc = self.gnupg.run(['--import'], args=filelist, create_fhs=['logger'])
         result = proc.handles['logger'].read()
         proc.handles['logger'].close()
         keyfile.close()
@@ -188,12 +192,12 @@ class GnupgFunctions(GnuPG):
         return result
 
     def verify(self, message):
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.always_trust = 1
-        self.options.homedir = self.keyring
-        self.options.extra_args = ['--with-fingerprint']
-        proc = self.run(['--verify'], create_fhs=['stdin', 'logger'])
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.always_trust = 1
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = ['--with-fingerprint']
+        proc = self.gnupg.run(['--verify'], create_fhs=['stdin', 'logger'])
         proc.handles['stdin'].write(message)
         proc.handles['stdin'].close()
         result = proc.handles['logger'].read()
@@ -205,13 +209,13 @@ class GnupgFunctions(GnuPG):
         files.  To overcome this issue, I'm using tempfile to write the output
         to file instead of stdout."""
         temp = tempfile.TemporaryFile()
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.passphrase = passphrase
-        self.options.recipients = []
-        self.options.extra_args = ['--cipher-algo', 'AES256']
-        #self.options.extra_args.append('--no-version')
-        proc = self.run(['--symmetric'], create_fhs=['stdin'],
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.passphrase = passphrase
+        self.gnupg.options.recipients = []
+        self.gnupg.options.extra_args = ['--cipher-algo', 'AES256']
+        #self.gnupg.options.extra_args.append('--no-version')
+        proc = self.gnupg.run(['--symmetric'], create_fhs=['stdin'],
                                          attach_fhs={'stdout': temp})
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
@@ -224,13 +228,13 @@ class GnupgFunctions(GnuPG):
     def encrypt(self, recipient, payload):
         recipients = []
         recipients.append(recipient)
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.always_trust = 1
-        self.options.recipients = recipients
-        self.options.homedir = self.keyring
-        self.option.extra_args = []
-        proc = self.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.always_trust = 1
+        self.gnupg.options.recipients = recipients
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.extra_args = []
+        proc = self.gnupg.run(['--encrypt'], create_fhs=['stdin', 'stdout'])
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
@@ -242,21 +246,21 @@ class GnupgFunctions(GnuPG):
                   throw_key = False):
         recipients = []
         recipients.append(recipient)
-        #self.options.homedir = self.keyring
-        self.options.armor = 1
-        self.options.meta_interactive = 0
-        self.options.always_trust = 1
-        self.options.homedir = self.keyring
-        self.options.recipients = recipients
-        self.options.default_key = senderkey
-        self.options.extra_args = []
+        #self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.armor = 1
+        self.gnupg.options.meta_interactive = 0
+        self.gnupg.options.always_trust = 1
+        self.gnupg.options.homedir = self.keyring
+        self.gnupg.options.recipients = recipients
+        self.gnupg.options.default_key = senderkey
+        self.gnupg.options.extra_args = []
         if throw_key:
-            self.options.extra_args.append('--no-version')
-            self.options.extra_args.append('--throw-keyid')
-        self.passphrase = passphrase
-        proc = self.run(['--encrypt', '--sign'], create_fhs=['stdin',
-                                                              'stdout',
-                                                              'logger'])
+            self.gnupg.options.extra_args.append('--no-version')
+            self.gnupg.options.extra_args.append('--throw-keyid')
+        self.gnupg.passphrase = passphrase
+        proc = self.gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin',
+                                                                   'stdout',
+                                                                   'logger'])
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
         ciphertext = proc.handles['stdout'].read()
@@ -269,7 +273,7 @@ class GnupgFunctions(GnuPG):
             return result, None
         return result, ciphertext
 
-class GnupgStatParse():
+class GnuPGStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the
     various GnuPG operations. The only public function that should be called
     is statparse which takes a single arguement: the GnuPG status output.
@@ -521,8 +525,11 @@ class GnupgStatParse():
         return gpgstat
 
 def main():
-    g = GnupgFunctions("/crypt/var/nymserv/keyring")
-    gp = GnupgStatParse()
+    g = GnuPGFunctions("/crypt/var/nymserv/keyring")
+    gp = GnuPGStatParse()
+    txt = "The cat sat on the matress"
+    print g.symmetric("foo", txt)
+    g.reset_options()
 
 # Call main function.
 if (__name__ == "__main__"):

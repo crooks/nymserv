@@ -1418,7 +1418,7 @@ if (__name__ == "__main__"):
                    )
     postprep = PostPrep()
     hsub = hsub.HSub(config.getint('hsub', 'length'))
-    gpg = gnupg.GnupgFunctions(config.get('pgp', 'keyring'))
+    gpg = gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnupgStatParse()
     mailbox = Mailbox()
     main()
