@@ -23,7 +23,6 @@ import os.path
 import email.utils
 import time
 
-
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -47,6 +46,9 @@ class GnuPGFunctions():
         if not os.path.isdir(keyring):
             raise GnupgError("Keyring directory not found.")
         self.keyring = keyring
+        self.email_re = \
+          re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
+        
 
     def reset_options(self):
         self.gnupg.options = GnuPGInterface.Options()
@@ -128,7 +130,6 @@ class GnuPGFunctions():
     def emails_to_list(self):
         """This is a kludge, but a useful one.  It returns a list of all the
         uid pulic email addresses on a keyring."""
-        email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
         self.reset_options()
         proc = self.gnupg.run(['--list-keys'], create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
@@ -141,7 +142,7 @@ class GnuPGFunctions():
             if line.startswith("uid"):
                 foo, uid = line.split(" ", 1)
                 uid = uid.strip()
-                uidmail_match = email_re.search(uid)
+                uidmail_match = self.email_re.search(uid)
                 if uidmail_match:
                     uidmail.append(uidmail_match.group(0))
         return uidmail
