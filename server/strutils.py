@@ -104,6 +104,15 @@ def str2list(string):
         newitems.append(i.strip())
     return newitems
 
+def optparse(txt):
+    """Take a string of format "opt: val" and return its component parts."""
+    if not ":" in txt:
+        return None, None
+    o, v = txt.split(":", 1)
+    o = o.strip().lower()
+    v = v.strip()
+    return o, v
+
 def main():
     s = '  item1, item2 '
     print str2list(s)

@@ -17,10 +17,6 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-from email.mime.application import MIMEApplication
-from email.mime.image import MIMEImage
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from email.parser import Parser
 from optparse import OptionParser
 from strutils import file2list
@@ -43,8 +39,8 @@ import sys
 from daemon import Daemon
 import gnupg
 import hsub
-import urlfetch
 import strutils
+import URL_Handler
 
 class MyDaemon(Daemon):
     def run(self):
@@ -1167,122 +1163,14 @@ def process_send(result, payload):
 
 def process_url(payload):
     logging.debug('Received message requesting a URL.')
-    # These three variables store the required keys from within a URL request.
-    urls = []
-    key = False
-    hsubhash = False
-    # This URL checks for an acceptable format of config line.
-    url_re = re.compile("(\w+):? +(\S+)")
-    # Parse each line of the received and decrypted message.
-    lines = payload.split('\n')
-    for line in lines:
-        url_match = url_re.match(line)
-        if url_match:
-            urlopt = url_match.group(1).lower()
-            urlval = url_match.group(2)
-        if urlopt == "source" or urlopt == "url":
-            if not urlval in urls:
-                if not urlval.startswith("http://"):
-                    urlval = "http://%s" % urlval
-                urls.append(urlval)
-            else:
-                logging.info("Duplicate request for: " + urlval)
-        if urlopt == "key":
-            key = urlval
-        if urlopt == "hsub":
-            hsubhash = urlval
-    if len(urls) == 0:
-        logging.info("No URL's to retrieve.")
-        return True
-    # We cannot proceed without a Symmetric Key.  Posting plain-text to
-    # a.a.m is not a good idea.
-    if not key:
-        logging.info("No symmetric key specified.")
-        return True
-    if not hsubhash:
-        logging.debug("No hSub specified, setting to KEY.")
-        hsubhash = key
-    # Set up the basics of our multipart MIME response.
-    url_msg = MIMEMultipart('alternative')
-    url_msg['From'] = 'url@' + config.get('domains', 'default')
-    url_msg['To'] = 'somebody@alt.anonymous.messages'
-    url_msg['Subject'] = 'Nym Retrieval'
-    url_msg['Date'] = email.utils.formatdate()
-    handled_mime_types = ['text', 'application', 'image']
-    for url in urls:
-        # ct is Content-Type header.
-        rc, message, ct = urlfetch.geturl(url)
-        # All MIME Types consist of a Type and a Sub-Type
-        # If there's a return code of 100 then we want to log the
-        # plain-text error message, not the html content we were
-        # expecting but didn't get.
-        if rc >= 100:
-            logging.info(message)
-            url_part = MIMEText(message, 'plain')
-            url_part['Content-Description'] = url
-            url_msg.attach(url_part)
-            continue
-
-        # OK, we have retrieved a URL of some type.  Now to figure our
-        # exactly what it is.
-        logging.info("Retrieved: " + url + "  Type: " + ct)
-
-        # If we don't know the Content-Type, we can't encode it.
-        if not ct:
-            error_message = "Cannot verify Content-Type for " + url
-            logging.warn(error_message)
-            url_part = MIMEText(error_message, 'plain')
-            url_part['Content-Description'] = url
-            url_msg.attach(url_part)
-            continue
-
-        # If we get here then we must have a Content-Type
-        if '/' in ct:
-            type, slashright = ct.split('/')
-            # The Content-Type can include the Charset.  This is always
-            # delimited with a semi-colon.
-            elements = slashright.split(';')
-            # First bit after the slash is always the subtype.
-            subtype = elements.pop(0)
-            charset = False
-            for element in elements:
-                clean_element = element.strip()
-                if clean_element.startswith('charset='):
-                    charset = clean_element.split('=')[1]
-                    logging.debug('Charset defined as: ' + charset)
-                    break
-
-        else:
-            error_message = "Content-Type " + ct + "has no / in it"
-            logging.warn(error_message)
-            url_part = MIMEText(error_message, 'plain')
-            url_part['Content-Description'] = url
-            url_msg.attach(url_part)
-            continue
-
-        # We have a URL and know what type it is.
-        if not type in handled_mime_types:
-            error_message = "Cannot handle " + type + "files"
-            logging.warn(error_message)
-            url_part = MIMEText(error_message, 'plain')
-        elif type == 'image':
-            # We got a URL and it appears to be an image.
-            url_part = MIMEImage(message, subtype)
-        elif type == 'application':
-            # We got a URL and it appears to be a binary app.
-            url_part = MIMEApplication(message, subtype)
-        elif type == 'text':
-            if charset:
-                url_part = MIMEText(message, subtype, charset)
-            else:
-                url_part = MIMEText(message, subtype)
-        url_part['Content-Description'] = url
-        url_msg.attach(url_part)
-
-    # This makes the message mbox compliant so we can open it with a
-    # standard mail client like Mutt.
-    mime_msg = 'From foo@bar Thu Jan  1 00:00:01 1970\n'
-    mime_msg += url_msg.as_string() + '\n'
+    try:
+        urls, key, hsubhash = urlhandler.extract_directives(payload)
+    except DirectiveError, e:
+        # Malformed URL request, log and delete as there's not much else we
+        # can do abou it.
+        logging.info(e)
+        return True 
+    mime_msg = urlhandler.fetch_and_prep(urls)
     postprep.post_symmetric_message(mime_msg, hsubhash, key)
     return True
 
@@ -1419,7 +1307,8 @@ if (__name__ == "__main__"):
     postprep = PostPrep()
     hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
-    gpgparse = gnupg.GnupgStatParse()
+    gpgparse = gnupg.GnuPGStatParse()
+    urlhandler = URL_Handler.URL()
     mailbox = Mailbox()
     main()
 
