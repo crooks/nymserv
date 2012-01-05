@@ -1165,7 +1165,7 @@ def process_url(payload):
     logging.debug('Received message requesting a URL.')
     try:
         urls, key, hsubhash = urlhandler.extract_directives(payload)
-    except DirectiveError, e:
+    except URL_Handler.DirectiveError, e:
         # Malformed URL request, log and delete as there's not much else we
         # can do abou it.
         logging.info(e)
@@ -1308,7 +1308,7 @@ if (__name__ == "__main__"):
     hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnuPGStatParse()
-    urlhandler = URL_Handler.URL()
+    urlhandler = URL_Handler.URL(config.get('domains', 'default'))
     mailbox = Mailbox()
     main()
 

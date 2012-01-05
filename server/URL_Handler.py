@@ -40,11 +40,13 @@ class DirectiveError(Error):
         return repr(self.expr)
 
 class URL():
-    def __init__(self):
+    def __init__(self, domname):
         # This URL checks for an acceptable format of config line.
         self.handled_mime_types = ['text', 'application', 'image']
         user_agent =  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
         self.headers = { 'User-Agent' : user_agent }
+        # Ths default domain name (only used in the From header).
+        self.domname = domname
 
     def main(self, payload):
         urls, key, hsubhash = self.extract_directives(payload)
@@ -81,7 +83,7 @@ class URL():
     def fetch_and_prep(self, urls):
         # Set up the basics of our multipart MIME response.
         url_msg = MIMEMultipart('alternative')
-        url_msg['From'] = 'url@' + config.get('domains', 'default')
+        url_msg['From'] = 'url@' + self.domname
         url_msg['To'] = 'somebody@alt.anonymous.messages'
         url_msg['Subject'] = 'Nym Retrieval'
         url_msg['Date'] = email.utils.formatdate()
