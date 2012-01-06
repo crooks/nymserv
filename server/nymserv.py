@@ -18,10 +18,8 @@
 # for more details.
 
 from email.parser import Parser
-from optparse import OptionParser
 from strutils import file2list
 from time import sleep
-import ConfigParser
 import cStringIO
 import email
 import email.utils
@@ -41,6 +39,8 @@ import gnupg
 import hsub
 import strutils
 import URL_Handler
+from Config import options
+from Config import config
 
 class MyDaemon(Daemon):
     def run(self):
@@ -329,6 +329,9 @@ class UpdateUser():
         return moddict
 
 class PostPrep():
+    def __init__(self):
+        self.hsub = hsub.HSub(config.getint('hsub', 'length'))
+
     def news_headers(self, conf):
         """For all messages inbound to a.a.m for a Nym, the headers are
         standard.  The only required info is whether to hSub the Subject. We
@@ -344,7 +347,7 @@ class PostPrep():
         if 'hsub' in conf and conf['hsub']:
             # We use an hsub if we've been passed one.
             logging.debug("Generating hSub using key: " + conf['hsub'])
-            hash = hsub.hash(conf['hsub'])
+            hash = self.hsub.hash(conf['hsub'])
             message += "Subject: " + hash + '\n'
             logging.info("Generated a real hSub: " + hash)
         elif 'subject' in conf and conf['subject']:
@@ -358,7 +361,7 @@ class PostPrep():
             # entropy and then trim it to size.
             hsublen = config.getint('hsub', 'length')
             randbytes = int(hsublen / 2 + 1)
-            hash = hsub.cryptorandom(randbytes).encode('hex')
+            hash = self.hsub.cryptorandom(randbytes).encode('hex')
             hash = hash[:hsublen]
             message += "Subject: " + hash + "\n"
             logging.info("Fake hSub: " + hash)
@@ -452,102 +455,6 @@ def init_logging():
         level = loglevels[config.get('logging', 'level')],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
-
-def init_parser():
-    "Parse command line options."
-    parser = OptionParser()
-
-    parser.add_option("--config", dest = "rc",
-                      help = "Override .nymservrc location")
-    parser.add_option("-r", "--recipient", dest = "recipient",
-                      help = "Recipient email address")
-    parser.add_option("-l", "--list", dest = "list",
-                      help = "List user configuration")
-    parser.add_option("--cleanup", dest = "cleanup", action = "store_true",
-                      default=False, help = "Perform some housekeeping")
-    parser.add_option("--delete", dest = "delete",
-                      help = "Delete a user account and key")
-    parser.add_option("--process", dest = "process", action = "store_true",
-                      help = "Process a maildir (Experimental")
-    parser.add_option("--start", dest = "start", action = "store_true",
-                      help = "Start the Nymserver Daemon")
-    parser.add_option("--stop", dest = "stop", action = "store_true",
-                      help = "Stop the Nymserver Daemon")
-    parser.add_option("--restart", dest = "restart", action = "store_true",
-                      help = "Restart the Nymserver Daemon")
-    return parser.parse_args()
-
-def init_config():
-    # By default, all the paths are subdirectories of the homedir.
-    config.add_section('paths')
-    homedir = os.path.expanduser('~')
-    config.set('paths', 'user', os.path.join(homedir, 'users'))
-    config.set('paths', 'etc', os.path.join(homedir, 'etc'))
-    config.set('paths', 'pool', os.path.join(homedir, 'pool'))
-    config.set('paths', 'maildir', os.path.join(homedir, 'Maildir'))
-    config.set('paths', 'held', os.path.join(homedir, 'Maildir', 'held'))
-    config.set('paths', 'piddir', os.path.join(homedir, 'run'))
-    config.set('paths', 'logdir', os.path.join(homedir, 'log'))
-
-    # Logging
-    config.add_section('logging')
-    config.set('logging', 'level', 'info')
-
-    # Config options for NNTP Posting
-    config.add_section('nntp')
-    config.set('nntp', 'newsgroups', 'alt.anonymous.messages')
-    config.set('nntp', 'from', 'Nobody <noreply@mixnym.net>')
-    config.set('nntp', 'path', 'nymserv.mixmin.net!not-for-mail')
-    config.set('nntp', 'injectinfo', 'nymserv.mixmin.net')
-    config.set('nntp', 'contact', 'abuse@mixmin.net')
-
-    # hSub options
-    config.add_section('hsub')
-    config.set('hsub', 'length', 48)
-
-    # PGP options.  These are arbitrary defaults as the options must be
-    # provided.
-    config.add_section('pgp')
-    config.set('pgp', 'keyring', os.path.join(homedir, 'keyring'))
-    #config.set('pgp', 'key', 'pgpfingerprint')
-    #config.set('pgp', 'passphrase', 'pgppassphrase')
-
-    config.add_section('domains')
-    config.set('domains', 'default', 'mixnym.net')
-    config.set('domains', 'hosted', 'is-not-my.name, mixnym.net')
-
-    config.add_section('thresholds')
-    config.set('thresholds', 'daily_send_limit', 50)
-
-    # Try and process the .nymservrc file.  If it doesn't exist, we bailout
-    # as some options are compulsory.
-    if not options.rc:
-        #configfile = os.path.join(homedir, '.nymservrc')
-        #TODO This shouldn't be the default but it makes my life easier!
-        configfile = os.path.join('/crypt/var/nymserv', '.nymservrc')
-    else:
-        configfile = options.rc
-    if os.path.isfile(configfile):
-        config.read(configfile)
-    else:
-        sys.stdout.write("%s: Config file does not exist\n" % configfile)
-        sys.exit(1)
-
-    #with open('example.cfg', 'wb') as configfile:
-    #    config.write(configfile)
-    # Here's a kludge to convert the comma-seperated string of domains into
-    # a list that can be interrogated.
-    doms = strutils.str2list(config.get('domains', 'hosted'))
-    config.set('domains', 'hosted', doms)
-
-    # Abort checks if required config options are not defined.
-    if not config.has_option('pgp', 'key'):
-        sys.stdout.write("PGP key not specified in config. Aborting.\n")
-        sys.exit(1)
-    if not config.has_option('pgp', 'passphrase'):
-        logmes = "PGP passphrase not specified in config. Aborting.\n"
-        sys.stdout.write(logmes)
-        sys.exit(1)
 
 def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
@@ -1285,13 +1192,6 @@ def main():
 
 # Call main function.
 if (__name__ == "__main__"):
-    # Parser before config in case someone wants to override the default
-    # .nymservrc file.
-    (options, args) = init_parser()
-    config = ConfigParser.RawConfigParser()
-    init_config()
-    # Logging comes after config as we need config to define the loglevel and
-    # log path.  Chicken and egg foo.
     init_logging()
     # Initialize the Daemon
     daemon = MyDaemon(
@@ -1305,7 +1205,6 @@ if (__name__ == "__main__"):
                     config.get('paths', 'pool')
                    )
     postprep = PostPrep()
-    hsub = hsub.HSub(config.getint('hsub', 'length'))
     gpg = gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnuPGStatParse()
     urlhandler = URL_Handler.URL(config.get('domains', 'default'))
