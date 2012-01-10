@@ -49,7 +49,6 @@ class GnuPGFunctions():
         self.email_re = \
           re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
         
-
     def reset_options(self):
         self.gnupg.options = GnuPGInterface.Options()
         # Override some of GnuPGInterface's options with those we require.
@@ -176,7 +175,10 @@ class GnuPGFunctions():
         result = proc.handles['logger'].read()
         proc.handles['logger'].close()
         keyfile.close()
-        proc.wait()
+        try:
+            proc.wait()
+        except IOError, e:
+            pass
         return result
 
     def verify(self, message):
@@ -308,7 +310,7 @@ class GnuPGStatParse():
         # This one is returned on key imports
         # gpg: Total number processed: 0
         imported = "gpg: Total number processed: "
-        
+
         # gpg: key 1E49F7D8: public key "oo7 <oo7@mixnym.net>" imported
         imp = "gpg: key ([0-9A-F]+): public key \"(.*)\" imported"
         import_re = re.compile(imp)
@@ -330,6 +332,7 @@ class GnuPGStatParse():
         self.imported = imported
         self.import_re = import_re
         self.import_nc_re = import_nc_re
+        self.import_novalid_re = re.compile(imp)
         self.pub_re = pub_re
         self.sub_re = sub_re
         self.fingerprint_re = fingerprint_re

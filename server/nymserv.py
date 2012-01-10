@@ -738,7 +738,7 @@ def process_config(result, payload):
             logmes += "We don't allow more than one."
             logging.warn(logmes)
             return False
-        elif testimpstat['imported'] == 1:
+        elif testimpstat['imported'] == 1 and 'keyid' in testimpstat:
             logmes = "Imported key %(keyid)s has a single UID. " % testimpstat
             logmes += "Excellent! Proceeding with import process."
             logging.info(logmes)
