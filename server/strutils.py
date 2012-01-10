@@ -105,17 +105,28 @@ def str2list(string):
     return newitems
 
 def optparse(txt):
-    """Take a string of format "opt: val" and return its component parts."""
-    if not ":" in txt:
+    """URL opt/val arguements were originally defined as 'opt val' instead of
+    the standard 'opt: val'.  To address this, we look for whether space or
+    colon occurs first (on the principle that opt cannot contain a space).
+    We split them at the first occurance of space or colon."""
+    space = txt.find(" ")
+    colon = txt.find(":")
+    # If there is no space, find returns -1.  We therefore need to check
+    # that space is in fact positive.  We also ignore space=0 so that leading
+    # spaces are not treated as a seperator.
+    if space > 0 and (space < colon or colon < 0):
+        o, v = txt.split(" ", 1)
+    elif colon > 0:
+        o, v = txt.split(":", 1)
+    else:
         return None, None
-    o, v = txt.split(":", 1)
     o = o.strip().lower()
     v = v.strip()
     return o, v
 
 def main():
-    s = '  item1, item2 '
-    print str2list(s)
+    s = 'opt: val'
+    print optparse(s)
 
 # Call main function.
 if (__name__ == "__main__"):
