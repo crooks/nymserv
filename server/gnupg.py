@@ -210,6 +210,34 @@ class GnuPGFunctions():
         temp.close()
         return ciphertext
 
+    def signcrypt(self, recipient, senderkey, passphrase, payload,
+                  throw_key = False):
+        temp = tempfile.TemporaryFile()
+        recipients = [recipient]
+        self.reset_options()
+        self.gnupg.options.recipients = recipients
+        self.gnupg.options.default_key = senderkey
+        self.gnupg.options.extra_args = []
+        if throw_key:
+            self.gnupg.options.extra_args.append('--no-version')
+            self.gnupg.options.extra_args.append('--throw-keyid')
+        self.gnupg.passphrase = passphrase
+        proc = self.gnupg.run(['--encrypt', '--sign'],
+                                               create_fhs=['stdin', 'logger'],
+                                               attach_fhs={'stdout': temp})
+        proc.handles['stdin'].write(payload)
+        proc.handles['stdin'].close()
+        result = proc.handles['logger'].read()
+        proc.handles['logger'].close()
+        try:
+            proc.wait()
+        except IOError, e:
+            return result, None
+        temp.seek(0)
+        ciphertext = temp.read()
+        temp.close()
+        return result, ciphertext
+
     def encrypt(self, recipient, payload):
         recipients = [recipient]
         self.reset_options()
@@ -221,32 +249,6 @@ class GnuPGFunctions():
         proc.handles['stdout'].close()
         proc.wait()
         return ciphertext
-
-    def signcrypt(self, recipient, senderkey, passphrase, payload,
-                  throw_key = False):
-        recipients = [recipient]
-        self.reset_options()
-        self.gnupg.options.recipients = recipients
-        self.gnupg.options.default_key = senderkey
-        self.gnupg.options.extra_args = []
-        if throw_key:
-            self.gnupg.options.extra_args.append('--no-version')
-            self.gnupg.options.extra_args.append('--throw-keyid')
-        self.gnupg.passphrase = passphrase
-        proc = self.gnupg.run(['--encrypt', '--sign'], create_fhs=['stdin',
-                                                                   'stdout',
-                                                                   'logger'])
-        proc.handles['stdin'].write(payload)
-        proc.handles['stdin'].close()
-        ciphertext = proc.handles['stdout'].read()
-        result = proc.handles['logger'].read()
-        proc.handles['stdout'].close()
-        proc.handles['logger'].close()
-        try:
-            proc.wait()
-        except IOError, e:
-            return result, None
-        return result, ciphertext
 
 class GnuPGStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the

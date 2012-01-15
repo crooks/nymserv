@@ -426,7 +426,7 @@ class PostPrep():
             logging.error(logmes)
         else:
             logmes = "GnuPG returned no payload or error during signcrypt. "
-            logmes = "The recipient was: %s" % recipient
+            logmes += "The recipient was: %s" % recipient
             logging.error(logmes)
 
     def pool_write(self, payload):
