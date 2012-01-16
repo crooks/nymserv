@@ -110,7 +110,8 @@ class GnuPGFunctions():
         None is returned.  This prevents potential ambiguity."""
         self.reset_options()
         idlist = [keyid]
-        proc = self.gnupg.run(['--fingerprint'], args=idlist, create_fhs=['stdout'])
+        proc = self.gnupg.run(['--fingerprint'], args=idlist,
+                                                 create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
         lines = result.split("\n")
