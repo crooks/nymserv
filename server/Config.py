@@ -92,6 +92,8 @@ config.set('domains', 'hosted', 'is-not-my.name, mixnym.net')
 
 config.add_section('thresholds')
 config.set('thresholds', 'daily_send_limit', 50)
+config.set('thresholds', 'url_size_limit', 512 * 1024)
+config.set('thresholds', 'post_size_limit', 512 * 1024)
 
 # Try and process the .nymservrc file.  If it doesn't exist, we bailout
 # as some options are compulsory.

@@ -27,6 +27,7 @@ from httplib import InvalidURL
 import logging
 import email.utils
 import strutils
+from Config import config
 
 class Error(Exception):
     """Base class for exceptions in this module."""
@@ -40,13 +41,14 @@ class DirectiveError(Error):
         return repr(self.expr)
 
 class URL():
-    def __init__(self, domname):
+    def __init__(self):
         # This URL checks for an acceptable format of config line.
         self.handled_mime_types = ['text', 'application', 'image']
-        user_agent =  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
+        user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
         self.headers = { 'User-Agent' : user_agent }
+        self.maxsize = config.get('thresholds', 'url_size_limit')
+        self.fromhdr = 'url@' + config.get('domains', 'default')
         # Ths default domain name (only used in the From header).
-        self.domname = domname
 
     def main(self, payload):
         urls, key, hsubhash = self.extract_directives(payload)
@@ -83,7 +85,7 @@ class URL():
     def fetch_and_prep(self, urls):
         # Set up the basics of our multipart MIME response.
         url_msg = MIMEMultipart('alternative')
-        url_msg['From'] = 'url@' + self.domname
+        url_msg['From'] = self.fromhdr
         url_msg['To'] = 'somebody@alt.anonymous.messages'
         url_msg['Subject'] = 'Nym Retrieval'
         url_msg['Date'] = email.utils.formatdate()
@@ -101,6 +103,11 @@ class URL():
                     ct = 'text/plain'
             except InvalidURL, e:
                 message = "Invalid URL: %s. Reason: %s" % (url, e)
+                ct = 'text/plain'
+            if len(message) > self.maxsize:
+                msglen = len(message)
+                message = "Could not fetch %s: Size of %s " % (url, msglen)
+                message += "exceeds configured limit of %s" % self.maxsize
                 ct = 'text/plain'
 
             # If we don't know the Content-Type, we can't encode it.

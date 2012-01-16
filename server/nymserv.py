@@ -622,8 +622,8 @@ def msgparse(recipient, message):
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
         if not recipient in nymlist:
-            logging.info('No public key for recipient %s.' % recipient)
-            return False
+            logging.info('Unknown recipient %s.' % recipient)
+            return True
         userfile = os.path.join(config.get('paths', 'user'),
                                 recipient + '.db')
         if os.path.exists(userfile):
@@ -1207,7 +1207,7 @@ if (__name__ == "__main__"):
     postprep = PostPrep()
     gpg = gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
     gpgparse = gnupg.GnuPGStatParse()
-    urlhandler = URL_Handler.URL(config.get('domains', 'default'))
+    urlhandler = URL_Handler.URL()
     mailbox = Mailbox()
     main()
 
