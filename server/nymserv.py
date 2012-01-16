@@ -1115,6 +1115,9 @@ def stdout_user(user):
         sys.stdout.write(userfile + ': File not found\n')
         sys.exit(1)
     userconf = shelve.open(userfile)
+    today = strutils.datestr()
+    if 'last_sent' in userconf and userconf['last_sent'] <> today:
+        userconf['sent_today'] = 0
     for key in userconf:
         sys.stdout.write('%s: %s\n' % (key, userconf[key]))
     userconf.close()
