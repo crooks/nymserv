@@ -854,6 +854,9 @@ def process_config(result, payload):
                                 sigfor + '.key')
         f = open(filename, 'w')
         f.write(gpg.export(fingerprint) + '\n') 
+        f.close()
+        os.chmod(filename, 0600)
+
         created = True  # Flag this as a newly created Nym
         logmes = "%s: Nym was successfully created" % sigfor
 
