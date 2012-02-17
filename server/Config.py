@@ -19,7 +19,7 @@
 
 import ConfigParser
 from optparse import OptionParser
-import os.path
+import os
 import sys
 import strutils
 
@@ -97,7 +97,7 @@ config.set('thresholds', 'post_size_limit', 512 * 1024)
 
 # Try and process the .nymservrc file.  If it doesn't exist, we bailout
 # as some options are compulsory.
-if not options.rc:
+if options.rc:
     configfile = options.rc
 elif 'NYMSERV' in os.environ:
     configfile = os.environ['NYMSERV']
