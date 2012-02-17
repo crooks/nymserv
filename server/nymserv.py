@@ -289,7 +289,7 @@ class UpdateUser():
         # We ignore the next two fields to prevent warnings about MIME content.
         ignore_fields.append("content-type")
         ignore_fields.append("content-disposition")
-        self.confopt_re = re.compile('([\w\-]+?):\s*(.+)')
+        self.confopt_re = re.compile('([\w\-]+?):\s*(.{1,64})$')
         self.ignore_fields = ignore_fields
     
     def make_moddict(self, text):
@@ -1141,7 +1141,7 @@ def delete(email):
     sys.stdout.write("Fingerprint for %s is %s\n" % (email, fp))
     if fp is not None:
         gpg.delete_key(fp)
-        sys.stdout.write("%s: Deleted" % fp)
+        sys.stdout.write("%s: Deleted\n" % fp)
         sys.exit(0)
     logmes = "%s: Key not deleted, unable to determine Fingerprint.\n" % fp
     sys.stdout.write(logmes)
