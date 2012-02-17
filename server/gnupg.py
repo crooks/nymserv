@@ -88,6 +88,7 @@ class GnuPGFunctions():
         result = proc.handles['logger'].read()
         key = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
+        proc.handles['logger'].close()
         proc.wait()
         # result isn't returned as it doesn't mean much from an export.
         return key
@@ -172,9 +173,10 @@ class GnuPGFunctions():
             self.gnupg.options.extra_args.append('--keyring')
             self.gnupg.options.extra_args.append('tmpring.gpg')
         proc = self.gnupg.run(['--import'], args=filelist,
-                                            create_fhs=['logger'])
+                                            create_fhs=['logger', 'stdout'])
         result = proc.handles['logger'].read()
         proc.handles['logger'].close()
+        proc.handles['stdout'].close()
         keyfile.close()
         try:
             proc.wait()
@@ -507,7 +509,7 @@ def main():
     g = GnuPGFunctions("/crypt/var/nymserv/keyring")
     gp = GnuPGStatParse()
     txt = "The cat sat on the matress"
-    print g.symmetric("foo", txt)
+    print g.import_key(txt)
     g.reset_options()
 
 # Call main function.
