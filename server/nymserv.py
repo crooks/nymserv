@@ -44,10 +44,12 @@ from Config import config
 
 class MyDaemon(Daemon):
     def run(self):
+        sleepfor = config.getint('thresholds', 'sleep_interval')
         while True:
             mailbox.process()
             pool.process()
-            sleep(3600)
+            logging.info("Sleeping for %s seconds" % sleepfor)
+            sleep(sleepfor)
 
 class PoolPost:
     def __init__(self, etcpath, poolpath):

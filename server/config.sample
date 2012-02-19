@@ -98,3 +98,6 @@
 # When this limit is hit in a single day (midight - midnight UTC), sending
 # for that Nym will be disabled.
 #dailt_send_limit = 50
+
+# How long to sleep between timed mail and pool processsing.
+#sleep_interval = 3600
