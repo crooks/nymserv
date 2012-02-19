@@ -60,24 +60,25 @@ class GnuPGFunctions():
     def decrypt_verify(self, message, passphrase):
         """This function is unusual in that it returns 3 variables:
         Return Code, Result (Email if verified), Decrypted Payload."""
+        temp = tempfile.TemporaryFile()
         self.reset_options()
         self.gnupg.options.extra_args = ['--with-fingerprint']
         self.gnupg.passphrase = passphrase
-        proc = self.gnupg.run(['--decrypt'], create_fhs=['stdin',
-                                                   'stdout',
-                                                   'logger'])
+        proc = self.gnupg.run(['--decrypt'], create_fhs=['stdin', 'logger'],
+                                             attach_fhs={'stdout': temp})
         proc.handles['stdin'].write(message)
         proc.handles['stdin'].close()
         result = proc.handles['logger'].read()
-        content = proc.handles['stdout'].read()
         proc.handles['logger'].close()
-        proc.handles['stdout'].close()
         # We need to trap decrypt failures, otherwise execution aborts with
         # a traceback, just because we can't decrypt a message.
         try:
             proc.wait()
         except IOError, e:
             pass
+        temp.seek(0)
+        content = temp.read()
+        temp.close()
         return result, content
 
     def export(self, keyid):
