@@ -27,10 +27,10 @@ setup(
     author='Steve Crook',
     author_email='steve@mixmin.net',
     version='0.1',
-    packages=['aam2mail', ],
+    packages=['nymserv', ],
     scripts=['nymserv/nymserv', ],
     license='GPLv3',
     url='https://github.com/crooks/nymserv',
     long_description=open('README').read(),
-    data_files=[('man/man1', ['man/nymserv.1'])],
+    #data_files=[('man/man1', ['man/nymserv.1'])],
 )

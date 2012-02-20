@@ -21,30 +21,47 @@ import ConfigParser
 from optparse import OptionParser
 import os
 import sys
-import strutils
+import nymserv.strutils
+
+
+def makedirs(dirlist):
+    """Parse a list of directories and check if each exists.  If it doesn't,
+    check if the parent exists.  If it does then the new directory will be
+    created.  If not then options are exhausted and the program aborts.
+
+    """
+    for d in makedirs:
+        if not os.path.isdir(d):
+            basedir = os.path.dirname(d)
+            if os.path.isdir(basedir):
+                os.mkdir(d, 0700)
+            else:
+                msg = "%s: Unable to make directory. Aborting." % d
+                sys.stdout.write(msg)
+                sys.exit(1)
 
 # OptParse comes first as ConfigParser depends on it to override the path to
 # the config file.
 parser = OptionParser()
 
-parser.add_option("--config", dest = "rc",
-                      help = "Override .nymservrc location")
-parser.add_option("-r", "--recipient", dest = "recipient",
-                      help = "Recipient email address")
-parser.add_option("-l", "--list", dest = "list",
-                      help = "List user configuration")
-parser.add_option("--cleanup", dest = "cleanup", action = "store_true",
-                      default=False, help = "Perform some housekeeping")
-parser.add_option("--delete", dest = "delete",
-                      help = "Delete a user account and key")
-parser.add_option("--process", dest = "process", action = "store_true",
-                      help = "Process a maildir (Experimental")
-parser.add_option("--start", dest = "start", action = "store_true",
-                      help = "Start the Nymserver Daemon")
-parser.add_option("--stop", dest = "stop", action = "store_true",
-                      help = "Stop the Nymserver Daemon")
-parser.add_option("--restart", dest = "restart", action = "store_true",
-                      help = "Restart the Nymserver Daemon")
+parser.add_option("--config", dest="rc",
+                      help="Override .nymservrc location")
+parser.add_option("-r", "--recipient", dest="recipient",
+                      help="Recipient email address")
+parser.add_option("-l", "--list", dest="list",
+                      help="List user configuration")
+parser.add_option("--cleanup", dest="cleanup", action="store_true",
+                      default=False, help="Perform some housekeeping")
+parser.add_option("--delete", dest="delete",
+                      help="Delete a user account and key")
+parser.add_option("--process", dest="process", action="store_true",
+                      help="Process a maildir (Experimental")
+parser.add_option("--start", dest="start", action="store_true",
+                      help="Start the Nymserver Daemon")
+parser.add_option("--stop", dest="stop", action="store_true",
+                      help="Stop the Nymserver Daemon")
+parser.add_option("--restart", dest="restart", action="store_true",
+                      help="Restart the Nymserver Daemon")
 
 (options, args) = parser.parse_args()
 
@@ -114,7 +131,7 @@ else:
 #    config.write(configfile)
 # Here's a kludge to convert the comma-seperated string of domains into
 # a list that can be interrogated.
-doms = strutils.str2list(config.get('domains', 'hosted'))
+doms = nymserv.strutils.str2list(config.get('domains', 'hosted'))
 config.set('domains', 'hosted', doms)
 
 # Abort checks if required config options are not defined.
@@ -125,3 +142,5 @@ if not config.has_option('pgp', 'passphrase'):
     logmes = "PGP passphrase not specified in config. Aborting.\n"
     sys.stdout.write(logmes)
     sys.exit(1)
+
+makedirs(config.options('paths'))
