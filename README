@@ -1,0 +1,20 @@
+Nymserv - A GnuPG-based pseudonymous email server
+
+Nymserv is a Posix based GnuPG-based pseudonymous email server, written in
+Python.  It functions as a bridge between standard and registered anonymous
+email users.  Messages from anonymous users are delivered in plain-text via
+SMTP.  Messages to anonymous users are encrypted using GnuPG and delivered to a
+shared mailbox, in the form of a Usenet Newsgroups "alt.anonymous.messages".
+
+This is beta software and may occasionally crash.  Please provide feedback,
+including Traceback details if available.  Your efforts will help improve
+future releases of the application.  Please see the CHANGES file for details of
+updates between releases.  If you'd like to get involved in development
+activities, the repository, containing development versions, can be found at:
+
+https://github.com/crooks/nymserv
+
+This application is released under the GPL license.  Please see the included
+LICENSE file for Terms & Conditions of its usage.
+
+Copyright (C) 2012 Steve Crook <steve@mixmin.net>
