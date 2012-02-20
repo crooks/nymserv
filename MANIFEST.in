@@ -1,0 +1,8 @@
+include README
+include CHANGES
+include LICENSE
+include INSTALL
+include samples/config.sample
+include samples/newsservers
+include samples/reserved_nyms
+include man/nymserv.1
