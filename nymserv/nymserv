@@ -342,7 +342,7 @@ class PostPrep():
         """
         # A full hex hSub is 80 hex digits. It's trimmed to match the length of
         # other systems, such as eSub.
-        mid = strutils.messageid(config.get('domains', 'default'))
+        mid = nymserv.strutils.messageid(config.get('domains', 'default'))
         message  = "Path: %s\n" % config.get('nntp', 'path')
         message += "From: %s\n" % config.get('nntp', 'from')
         if 'hsub' in conf and conf['hsub']:
@@ -438,7 +438,7 @@ class PostPrep():
 
         """
         # Create a filename for the pool file with an 'a' prefix.
-        poolfile = strutils.pool_filename('a')
+        poolfile = nymserv.strutils.pool_filename('a')
         fq_poolfile = os.path.join(config.get('paths', 'pool'), poolfile)
         # Write the pool file
         f = open(fq_poolfile, 'w')
@@ -475,7 +475,7 @@ def send_success_message(msg):
 def create_success_message(userconf):
     "Respond to a successful Nym create request."
     payload  = "Congratulations!\n"
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += "You have registered the pseudonym %(address)s.\n" % userconf
     payload += """
 From now on, messages sent to this address will be encrypted to your key and
@@ -505,7 +505,7 @@ alt.anonymous.messages, formatted in accordance with your request.\n\n"""
 def delete_success_message(email):
     "Respond to a successful Nym delete request."
     payload  = "Nym Deletion in progress!\n"
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += "Your nym " + email + " is now being deleted.\n"
     payload += """
 As per your modification request, your nym is now being deleted from the
@@ -518,7 +518,7 @@ configuration.  Good-Bye, it's been good!\n"""
 def modify_success_message(userconf):
     "Respond to successful Nym modification request."
     payload  = "Nym Modification Successful\n"
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += "You have successfully modified your "
     payload += "pseudonym %(address)s.\n\n" % userconf
     payload += optstring(userconf)
@@ -526,7 +526,7 @@ def modify_success_message(userconf):
 
 def duplicate_message(keyid, addy):
     payload  = "Error - Duplicate Nym Address " + addy + ".\n"
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += """
 You attempted to register a Nym that already exists on the server.  You are
 receiving this response because the server can send a message encrypted to
@@ -538,7 +538,7 @@ address.  Hence, the email address must be unique.\n"""
 
 def reserved_message(keyid, addy):
     payload  = 'Error - ' + addy + " is a reserved Nym.\n"
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += """
 You attempted to register a reserved Nym name.  You are receiving this response
 because the server can send a message encrypted to the unique key you created
@@ -549,7 +549,7 @@ but the Nym will not be functional.\n"""
 
 def send_no_recipient_message(email, subject):
     payload = 'Error: Message not sent\n'
-    payload += strutils.underline('-', payload)
+    payload += nymserv.strutils.underline('-', payload)
     payload += 'Your request to send a message from your nym ' + email
     payload += ' failed.\n'
     payload += 'The Subject of the message was: ' + subject + '\n'
@@ -639,7 +639,7 @@ def msgparse(recipient, message):
             userconf['received'] += 1
         else:
             userconf['received'] = 1
-        userconf['last_received'] = strutils.datestr()
+        userconf['last_received'] = nymserv.strutils.datestr()
         userconf.close()
         return True
         # That's it for inbound messages to Nyms.
@@ -848,7 +848,7 @@ def process_config(result, payload):
         logging.info('Creating user config file %s' % userfile)
         userconf = shelve.open(userfile)
         userconf['fingerprint'] = fingerprint
-        userconf['created'] = strutils.datestr()
+        userconf['created'] = nymserv.strutils.datestr()
         userconf['address'] = sigfor
         # Write the public key to a file, just in case we ever need it.
         filename = os.path.join(config.get('paths', 'user'),
@@ -903,7 +903,7 @@ def process_config(result, payload):
         modified = True
     if modified and not created:
         # Add (or update) the modified date in the user configuration
-        userconf['modified'] = strutils.datestr()
+        userconf['modified'] = nymserv.strutils.datestr()
     elif not modified and not created:
        logging.info("%s: Nothing modified. Sending status." % sigfor)
     # Everyone should have their address in the user configuration
@@ -1019,7 +1019,7 @@ def process_send(result, payload):
     if 'Message-ID' in send_msg:
         logging.debug('Using provided Message-ID')
     else:
-        send_mid = strutils.messageid(config.get('domains', 'default'))
+        send_mid = nymserv.strutils.messageid(config.get('domains', 'default'))
         logmes  = 'Generating Message-ID ' + send_mid
         logmes += ' for outbound message.'
         logging.info(logmes)
@@ -1044,7 +1044,7 @@ def process_send(result, payload):
     else:
         userconf['sent'] = 1
     # Get today's date as a string
-    today = strutils.datestr()
+    today = nymserv.strutils.datestr()
     if not 'last_sent' in userconf:
         # We've never sent a message, we have now!
         userconf['last_sent'] = today
@@ -1119,7 +1119,7 @@ def stdout_user(user):
         sys.stdout.write(userfile + ': File not found\n')
         sys.exit(1)
     userconf = shelve.open(userfile)
-    today = strutils.datestr()
+    today = nymserv.strutils.datestr()
     if 'last_sent' in userconf and userconf['last_sent'] <> today:
         userconf['sent_today'] = 0
     for key in userconf:
