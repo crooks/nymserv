@@ -24,19 +24,21 @@ import sys
 import nymserv.strutils
 
 
-def makedirs(dirlist):
+def makedirs():
     """Parse a list of directories and check if each exists.  If it doesn't,
     check if the parent exists.  If it does then the new directory will be
     created.  If not then options are exhausted and the program aborts.
 
     """
-    for d in makedirs:
+    for opt in config.options('paths'):
+        d = config.get('paths', opt)
         if not os.path.isdir(d):
             basedir = os.path.dirname(d)
             if os.path.isdir(basedir):
                 os.mkdir(d, 0700)
+                sys.stdout.write("%s: Directory created.\n" % d)
             else:
-                msg = "%s: Unable to make directory. Aborting." % d
+                msg = "%s: Unable to make directory. Aborting.\n" % d
                 sys.stdout.write(msg)
                 sys.exit(1)
 
@@ -143,4 +145,4 @@ if not config.has_option('pgp', 'passphrase'):
     sys.stdout.write(logmes)
     sys.exit(1)
 
-makedirs(config.options('paths'))
+makedirs()
