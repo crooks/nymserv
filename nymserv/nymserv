@@ -452,7 +452,7 @@ def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
     logging.basicConfig(
-        filename=os.path.join(config.get('paths', 'logdir'), 'nym.log'),
+        filename=os.path.join(config.get('paths', 'logdir'), 'nymserv.log'),
         level = loglevels[config.get('logging', 'level')],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
@@ -1205,7 +1205,7 @@ if (__name__ == "__main__"):
             os.path.join(config.get('paths', 'piddir'), 'nymserv.pid'),
             '/dev/null',
             '/dev/null',
-            os.path.join(config.get('paths', 'logdir'), 'error')
+            os.path.join(config.get('paths', 'logdir'), 'nymserv.err')
             )
     updusr = UpdateUser()
     pool = PoolPost(config.get('paths', 'etc'),

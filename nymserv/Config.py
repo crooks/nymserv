@@ -24,23 +24,21 @@ import sys
 import nymserv.strutils
 
 
-def makedirs():
-    """Parse a list of directories and check if each exists.  If it doesn't,
-    check if the parent exists.  If it does then the new directory will be
-    created.  If not then options are exhausted and the program aborts.
+def makedir(d):
+    """Check if a given directory exists.  If it doesn't, check if the parent
+    exists.  If it does then the new directory will be created.  If not then
+    sensible options are exhausted and the program aborts.
 
     """
-    for opt in config.options('paths'):
-        d = config.get('paths', opt)
-        if not os.path.isdir(d):
-            basedir = os.path.dirname(d)
-            if os.path.isdir(basedir):
-                os.mkdir(d, 0700)
-                sys.stdout.write("%s: Directory created.\n" % d)
-            else:
-                msg = "%s: Unable to make directory. Aborting.\n" % d
-                sys.stdout.write(msg)
-                sys.exit(1)
+    if not os.path.isdir(d):
+        parent = os.path.dirname(d)
+        if os.path.isdir(parent):
+            os.mkdir(d, 0700)
+            sys.stdout.write("%s: Directory created.\n" % d)
+        else:
+            msg = "%s: Unable to make directory. Aborting.\n" % d
+            sys.stdout.write(msg)
+            sys.exit(1)
 
 def set_passphrase():
     """Passphrase simply contains the GnuPG Passphrase for the Nymserver's
@@ -84,16 +82,10 @@ parser.add_option("--restart", dest="restart", action="store_true",
 # Configure the Config Parser.
 config = ConfigParser.RawConfigParser()
 
-# By default, all the paths are subdirectories of the homedir.
+# By default, all the paths are subdirectories of the homedir. We define the
+# actual paths after reading the config file as they're relative to basedir.
 config.add_section('paths')
 homedir = os.path.expanduser('~')
-config.set('paths', 'user', os.path.join(homedir, 'users'))
-config.set('paths', 'etc', os.path.join(homedir, 'etc'))
-config.set('paths', 'pool', os.path.join(homedir, 'pool'))
-config.set('paths', 'maildir', os.path.join(homedir, 'Maildir'))
-config.set('paths', 'held', os.path.join(homedir, 'Maildir', 'held'))
-config.set('paths', 'piddir', os.path.join(homedir, 'run'))
-config.set('paths', 'logdir', os.path.join(homedir, 'log'))
 
 # Logging
 config.add_section('logging')
@@ -128,6 +120,9 @@ config.set('thresholds', 'url_size_limit', 512 * 1024)
 config.set('thresholds', 'post_size_limit', 512 * 1024)
 config.set('thresholds', 'sleep_interval', 1 * 60 * 60)
 
+#with open('example.cfg', 'wb') as configfile:
+#    config.write(configfile)
+
 # Try and process the .nymservrc file.  If it doesn't exist, we bailout
 # as some options are compulsory.
 if options.rc:
@@ -142,8 +137,44 @@ else:
     sys.stdout.write("%s: Config file does not exist\n" % configfile)
     sys.exit(1)
 
-#with open('example.cfg', 'wb') as configfile:
-#    config.write(configfile)
+# Now we check the directory structure exists and is valid.
+if config.has_option('paths', 'basedir'):
+    basedir = config.get('paths', 'basedir')
+else:
+    basedir = os.path.join(homedir, 'nymserv')
+    config.set('paths', 'basedir', basedir)
+makedir(basedir)
+
+if not config.has_option('paths', 'etc'):
+    config.set('paths', 'etc', os.path.join(basedir, 'etc'))
+makedir(config.get('paths', 'etc'))
+
+if not config.has_option('paths', 'users'):
+    config.set('paths', 'users', os.path.join(basedir, 'users'))
+makedir(config.get('paths', 'users'))
+
+if not config.has_option('paths', 'pool'):
+    config.set('paths', 'pool', os.path.join(basedir, 'pool'))
+makedir(config.get('paths', 'pool'))
+
+if not config.has_option('paths', 'piddir'):
+    config.set('paths', 'piddir', os.path.join(basedir, 'run'))
+makedir(config.get('paths', 'piddir'))
+
+if not config.has_option('paths', 'logdir'):
+    config.set('paths', 'logdir', os.path.join(basedir, 'logdir'))
+makedir(config.get('paths', 'logdir'))
+
+if not config.has_option('paths', 'maildir'):
+    config.set('paths', 'maildir', os.path.join(basedir, 'Maildir'))
+makedir(config.get('paths', 'maildir'))
+
+if not config.has_option('paths', 'held'):
+    config.set('paths', 'held', os.path.join(config.get('paths', 'maildir'),
+                                             'held'))
+makedir(config.get('paths', 'held'))
+
+
 # Here's a kludge to convert the comma-seperated string of domains into
 # a list that can be interrogated.
 doms = nymserv.strutils.str2list(config.get('domains', 'hosted'))
