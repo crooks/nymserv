@@ -452,7 +452,7 @@ def init_logging():
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
     logging.basicConfig(
-        filename=os.path.join(config.get('paths', 'logdir'), 'nymserv.log'),
+        filename=os.path.join(config.get('paths', 'log'), 'nymserv.log'),
         level = loglevels[config.get('logging', 'level')],
         format = '%(asctime)s %(process)d %(levelname)s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S')
@@ -1202,17 +1202,17 @@ if (__name__ == "__main__"):
     init_logging()
     # Initialize the Daemon
     daemon = MyDaemon(
-            os.path.join(config.get('paths', 'piddir'), 'nymserv.pid'),
+            os.path.join(config.get('paths', 'pid'), 'nymserv.pid'),
             '/dev/null',
             '/dev/null',
-            os.path.join(config.get('paths', 'logdir'), 'nymserv.err')
+            os.path.join(config.get('paths', 'log'), 'nymserv.err')
             )
     updusr = UpdateUser()
     pool = PoolPost(config.get('paths', 'etc'),
                     config.get('paths', 'pool')
                    )
     postprep = PostPrep()
-    gpg = nymserv.gnupg.GnuPGFunctions(config.get('pgp', 'keyring'))
+    gpg = nymserv.gnupg.GnuPGFunctions(config.get('paths', 'keyring'))
     gpgparse = nymserv.gnupg.GnuPGStatParse()
     urlhandler = nymserv.URL_Handler.URL()
     mailbox = Mailbox()

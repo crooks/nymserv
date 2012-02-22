@@ -106,7 +106,6 @@ config.set('hsub', 'length', 48)
 # PGP options.  These are arbitrary defaults as the options must be
 # provided.
 config.add_section('pgp')
-config.set('pgp', 'keyring', os.path.join(homedir, 'keyring'))
 #config.set('pgp', 'key', 'pgpfingerprint')
 #config.set('pgp', 'passphrase', 'pgppassphrase')
 
@@ -157,22 +156,34 @@ if not config.has_option('paths', 'pool'):
     config.set('paths', 'pool', os.path.join(basedir, 'pool'))
 makedir(config.get('paths', 'pool'))
 
-if not config.has_option('paths', 'piddir'):
-    config.set('paths', 'piddir', os.path.join(basedir, 'run'))
-makedir(config.get('paths', 'piddir'))
+if not config.has_option('paths', 'pid'):
+    config.set('paths', 'pid', os.path.join(basedir, 'run'))
+makedir(config.get('paths', 'pid'))
 
-if not config.has_option('paths', 'logdir'):
-    config.set('paths', 'logdir', os.path.join(basedir, 'logdir'))
-makedir(config.get('paths', 'logdir'))
+if not config.has_option('paths', 'log'):
+    config.set('paths', 'log', os.path.join(basedir, 'log'))
+makedir(config.get('paths', 'log'))
+
+if not config.has_option('paths', 'keyring'):
+    config.set('paths', 'keyring', os.path.join(basedir, 'keyring'))
+makedir(config.get('paths', 'keyring'))
 
 if not config.has_option('paths', 'maildir'):
     config.set('paths', 'maildir', os.path.join(basedir, 'Maildir'))
-makedir(config.get('paths', 'maildir'))
+maildir = config.get('paths', 'maildir')
+makedir(maildir)
+makedir(os.path.join(maildir, 'cur'))
+makedir(os.path.join(maildir, 'new'))
+makedir(os.path.join(maildir, 'tmp'))
 
 if not config.has_option('paths', 'held'):
     config.set('paths', 'held', os.path.join(config.get('paths', 'maildir'),
                                              'held'))
-makedir(config.get('paths', 'held'))
+maildir = config.get('paths', 'held')
+makedir(maildir)
+makedir(os.path.join(maildir, 'cur'))
+makedir(os.path.join(maildir, 'new'))
+makedir(os.path.join(maildir, 'tmp'))
 
 
 # Here's a kludge to convert the comma-seperated string of domains into
@@ -187,6 +198,4 @@ if not config.has_option('pgp', 'key'):
 
 # Things required when running the Nymserver.
 if options.start or options.process:
-    # Create the directory structure.
-    makedirs()
     set_passphrase()
