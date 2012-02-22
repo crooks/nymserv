@@ -42,6 +42,19 @@ def makedirs():
                 sys.stdout.write(msg)
                 sys.exit(1)
 
+def set_passphrase():
+    """Passphrase simply contains the GnuPG Passphrase for the Nymserver's
+    private key.  It can be defined in the config file but reading it on each
+    startup is considered more secure.  Python is not ideal in these
+    circumstances as it doesn't offer sufficiently low-level control of how
+    memory is allocated.
+
+    """
+    if not config.has_option('pgp', 'passphrase'):
+        msg = "%s: Enter secret passphrase: " % config.get('pgp', 'key')
+        config.set('pgp', 'passphrase', raw_input(msg))
+    
+
 # OptParse comes first as ConfigParser depends on it to override the path to
 # the config file.
 parser = OptionParser()
@@ -57,7 +70,7 @@ parser.add_option("--cleanup", dest="cleanup", action="store_true",
 parser.add_option("--delete", dest="delete",
                       help="Delete a user account and key")
 parser.add_option("--process", dest="process", action="store_true",
-                      help="Process a maildir (Experimental")
+                      help="Process the Maildir in current console session")
 parser.add_option("--start", dest="start", action="store_true",
                       help="Start the Nymserver Daemon")
 parser.add_option("--stop", dest="stop", action="store_true",
@@ -140,9 +153,9 @@ config.set('domains', 'hosted', doms)
 if not config.has_option('pgp', 'key'):
     sys.stdout.write("PGP key not specified in config. Aborting.\n")
     sys.exit(1)
-if not config.has_option('pgp', 'passphrase'):
-    logmes = "PGP passphrase not specified in config. Aborting.\n"
-    sys.stdout.write(logmes)
-    sys.exit(1)
 
-makedirs()
+# Things required when running the Nymserver.
+if options.start or options.process:
+    # Create the directory structure.
+    makedirs()
+    set_passphrase()
