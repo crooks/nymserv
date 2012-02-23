@@ -197,5 +197,5 @@ if not config.has_option('pgp', 'key'):
     sys.exit(1)
 
 # Things required when running the Nymserver.
-if options.start or options.process:
+if options.start or options.process or options.restart:
     set_passphrase()
