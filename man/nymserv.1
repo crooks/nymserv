@@ -1,0 +1,152 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\"
+.TH nymserv 1 "March 2012" Linux "User Manuals"
+.SH NAME
+nymserv \- Pseudonymous email service
+.SH SYNOPSIS
+.B nymserv
+{ --start | --stop | --restart | --help |--process | --delete |
+  --recipient | --help }
+.SH DESCRIPTION
+.B nymserv
+is a Python based pseudonymous email server based on \fBGnuPG\fP.  It's role
+is to maintain the anonymity of a user while enabling them to communicate
+via SMTP and a standard email address.
+.P
+.B nymserv
+can be run in a console session, or more normally, a background process.  It
+will periodically scan a defined Maildir for new messages and then encrypt them
+for the specific anonymous recipient. Finally the encrypted and anonymized
+message will be delivered to the Usenet shared mailbox
+\fBalt.anonymous\.messages\fP.
+.SH OPTIONS
+.TP
+.B --config
+Override the default ~/.nymservrc configuration file.
+.TP
+.B --start
+Start \fBnymserv\fP as a daemon.
+.TP
+.B --stop
+Stop the \fBnymserv\fP daemon. No further actions will be performed until the
+daemon is restarted or manually triggered with the \fB--process\fP option.
+.TP
+.B --restart
+Restart the \fBnymserv\fP. The daemon should be restarted after a configuration
+change or a logrotate.
+.TP
+.B --process
+Runs the \fBnymserv\fP process a single time in the current console session and
+then terminate.  This is useful for new installations and testing purposes,
+prior to running in Daemon mode.
+.TP
+.B [-l | --list] <nym_address>
+An interactive option to display the configuration details of a specific Nym.
+.TP
+.B --delete <nym_address>
+An interactive opion to delete a Nym.  This option will remove any reference
+to that Nym, including its configuration and public key.
+.TP
+.B [-r | --recipient] <recipent_address>
+Force the nymserver to assume the message is for the defined recipient instead
+of ascertaining it from the \fBX-Original-To\fP header.  This is intended for
+debug and testing purposes.
+.TP
+.B [-h | --help]
+Display a short help message
+.SH FILES
+This section describes the user-configurable files in \fBnymserv\fP.
+.TP
+.B .nymservrc
+This is the main configuration file.  It defines all the options relating to
+the function of nymserv, including the options to override the locations of
+all the other configuration files.  By default \fB.nymservrc\fP resides in
+$HOME.  The path and filename can be overridden with the \fB--config\fP option
+or by setting the Environment Variable \fBNYMSERV\fP.
+.P
+.IP
+The \fB.nymservrc\fP file is mandatory.  A sample config file
+\fBconfig.sample\fP is provided with the distribution and contains details of
+each supported option. \fINote:\fP This file can contain the GnuPG passphrase
+for the Nymserver's private key. The other option is to enter the passphrase
+on each start/restart/process.
+Default=$HOME/.nymservrc
+.TP
+.B newsservers
+This file contains a list of the full-qualified hostnames for the newsservers
+that \fBnymserv\fP peers with. The peering should only be downstream as the
+nymserver doesn't require an incoming feed.
+Default=$HOME/nymserv/etc/newsservers
+.P
+.TP
+.B reserved_nyms
+Contains a list of reserved Nym names.  Users will be unable to create nym
+addresses where the left-side of the \@ matches entries in this list.
+Default=$HOME/nymserv/etc/reserved_nyms
+.SH PATHS
+All of the paths will be automatically created (if possible) during the first
+run of \fBnymserv\fP. For this reason, it's best to configure their preferred
+locations prior to the first run.
+.TP
+.B keyring
+The path to the \fBGnuPG\fP keyring. This will hold a Public Key for each
+of the Nyms created on the server. It will also contain the complete Keypair
+for the Nymserver's GnuPG key.
+Default=$HOME/nymserv/keyring
+.TP
+.B etc
+Where, by default, the configuration files described in the \fIFILES\fP section
+are located.
+Default=$HOME/nymserv/etc
+.TP
+.B users
+The users directory contains a configuration file for each Nym account. A copy
+of the associated \fIGnuPG Public Key\fP is also retained here.
+Default=$HOME/nymserv/users
+.TP
+.B run
+Where the nymserv.pid file will be written.
+Default=$HOME/nymserv/run
+.TP
+.B pool
+Outbound files are temporarily stored here prior to being posted to
+\fBalt.anonymous.messages\fP. The message payload is encrypted prior to being
+written to the pool.
+Default=$HOME/nymserv/pool
+.TP
+.B log
+By default the \fBnymserv.log\fP and the \fBnymserv.err\fP are written to this
+directory.
+Default=$HOME/nymserv/log
+.TP
+.B Maildir
+This is the Maildir formatted directory where \fBnymserv\fP will look for
+incoming email messages. How messages get delivered to this folder is specific
+to the local MTA and Procmail configuration.
+Default=$HOME/nymserv/Maildir
+.TP
+.B held
+Another Maildir formatted directory where \fBnymserv\fP will store messages
+it fails to process. No further action will be taken on these messages, they
+are only retained for examination by the operator to aid in ascertaining
+why they couldn't be processed.
+Default=$HOME/nymserv/Maildir/held
+.SH ENVIRONMENT VARIABLES
+.TP
+.B NYMSERV
+Define a path to the main \fBnymserv\fP configuration file.  This overrides
+the default \fI$HOME/.nymservrc\fP. It can be overridden with the
+\fB--config\fP option on startup.
+.SH EXAMPLES
+.TP
+.B nymserv --start
+Start \fBnymserv\fP in non-interactive, daemon mode.
+.TP
+.B nymserv --config=/etc/nymservrc --process
+Run \fBnymserv\fP in the current console session and use \fI/etc/nymservrc\fP
+as the configuration file.
+.TP
+.B cat email | nymserv --recipient=nymname@nymdomain.org
+Pipe a message to the nymserver and force a defined recipient instead of
+letting the server attempt to read it from the email content.
