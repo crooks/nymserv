@@ -122,6 +122,7 @@ config.set('thresholds', 'daily_send_limit', 50)
 config.set('thresholds', 'url_size_limit', 512 * 1024)
 config.set('thresholds', 'post_size_limit', 512 * 1024)
 config.set('thresholds', 'sleep_interval', 1 * 60 * 60)
+config.set('thresholds', 'socket_timeout', 10)
 
 #with open('example.cfg', 'wb') as configfile:
 #    config.write(configfile)

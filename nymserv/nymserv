@@ -55,7 +55,8 @@ class MyDaemon(Daemon):
 
 class PoolPost:
     def __init__(self, etcpath, poolpath):
-        socket.setdefaulttimeout(10)
+        timeout = config.getint('thresholds', 'socket_timeout')
+        socket.setdefaulttimeout(timeout)
         hostfile = os.path.join(etcpath, 'newsservers')
         if not os.path.isfile(hostfile):
             logging.error('%s: Peers file does not exist' % hostfile)
@@ -112,7 +113,7 @@ class PoolPost:
                 self.post_files(peers, pool_files)
 
     def post_files(self, peers, pool_files):
-        """Attempt tp post a list of files handed to us by process().
+        """Attempt to post a list of files handed to us by process().
 
         """
         # Iterate through all the files in the pool
@@ -172,7 +173,7 @@ class PoolPost:
                 except nntplib.NNTPTemporaryError:
                     message = '%s: IHAVE returned a temporary error: ' % host
                     message += '%s.' % sys.exc_info()[1]
-                    logging.info(message)
+                    logging.debug(message)
                 except nntplib.NNTPPermanentError:
                     message = '%s: IHAVE returned a permanent error: ' % host
                     message += '%s.' % sys.exc_info()[1]
