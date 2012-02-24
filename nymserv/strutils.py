@@ -30,6 +30,7 @@ def datetimestr():
     utcstamp = utctime.strftime("%Y%m%d%H%M%S")
     return utcstamp
 
+
 def datestr():
     """As per middate but only return the date element of UTC.  This is used
     for generating log and history files."""
@@ -37,11 +38,13 @@ def datestr():
     utcstamp = utctime.strftime("%Y%m%d")
     return utcstamp
 
+
 def hours_ago(hrs):
     "Create a timestamp for x hours ago."
     thentime = datetime.datetime.utcnow() - datetime.timedelta(hours=hrs)
     timestamp = thentime.strftime("%Y-%m-%d %H:%M:%S")
     return timestamp
+
 
 def randstr(numchars):
     """Return a string of random chars"""
@@ -50,9 +53,11 @@ def randstr(numchars):
         randstring += random.choice('abcdefghijklmnopqrstuvwxyz')
     return randstring
 
+
 def pool_filename(prefix):
     """File naming format for pool files."""
     return str(prefix) + datetimestr() + '.' + randstr(6)
+
 
 def messageid(rightpart):
     """Compile a valid Message-ID."""
@@ -60,12 +65,14 @@ def messageid(rightpart):
     mid = '<' + leftpart + '@' + rightpart + '>'
     return mid
 
+
 def underline(char, string):
     "Return a string of char repeated len(string) times."
     string = string.rstrip('\n')
     count = len(string)
     retstr = char * count + '\n\n'
     return retstr
+
 
 def file2list(filename):
     """Read a file and return each line as a list item."""
@@ -78,6 +85,7 @@ def file2list(filename):
                 items.append(entry)
         readlist.close()
     return items
+
 
 def file2text(filename, conf):
     """Read a file a return it as a tidied string. Paragraphs in the file
@@ -95,6 +103,7 @@ def file2text(filename, conf):
             payload += p + '\n\n'
     return payload.rstrip()
 
+
 def str2list(string):
     """Take a comma-seperated string and return it as a list, with leading and
     trailing spaces removed from each item."""
@@ -103,6 +112,7 @@ def str2list(string):
     for i in items:
         newitems.append(i.strip())
     return newitems
+
 
 def optparse(txt):
     """URL opt/val arguements were originally defined as 'opt val' instead of
@@ -123,6 +133,7 @@ def optparse(txt):
     o = o.strip().lower()
     v = v.strip()
     return o, v
+
 
 def main():
     s = 'opt: val'

@@ -29,23 +29,27 @@ import email.utils
 import strutils
 from Config import config
 
+
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
+
 
 class DirectiveError(Error):
     """User supplied directives are incompatible."""
     def __init__(self, expr):
         self.expr = expr
+
     def __str__(self):
         return repr(self.expr)
+
 
 class URL():
     def __init__(self):
         # This URL checks for an acceptable format of config line.
         self.handled_mime_types = ['text', 'application', 'image']
         user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
-        self.headers = { 'User-Agent' : user_agent }
+        self.headers = {'User-Agent': user_agent}
         self.maxsize = config.get('thresholds', 'url_size_limit')
         self.fromhdr = 'url@' + config.get('domains', 'default')
         # Ths default domain name (only used in the From header).

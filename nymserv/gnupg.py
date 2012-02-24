@@ -23,21 +23,24 @@ import os.path
 import email.utils
 import time
 
+
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
+
 
 class GnupgError(Error):
     """GnuPG Verification Errors"""
     def __init__(self, expr):
         self.expr = expr
+
     def __str__(self):
         return repr(self.expr)
 
+
 # Superclass GnuPGInterface.GnuPG
 class GnuPGFunctions():
-    
-    def __init__(self, keyring = None):
+    def __init__(self, keyring=None):
         self.gnupg = GnuPGInterface.GnuPG()
         # Process our subclass __init__
         if keyring is None:
@@ -48,7 +51,7 @@ class GnuPGFunctions():
         self.keyring = keyring
         self.email_re = \
           re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
-        
+
     def reset_options(self):
         self.gnupg.options = GnuPGInterface.Options()
         # Override some of GnuPGInterface's options with those we require.
@@ -158,7 +161,7 @@ class GnuPGFunctions():
         proc = self.gnupg.run(['--delete-key'], args=idlist)
         proc.wait()
 
-    def import_key(self, key, dryrun = False):
+    def import_key(self, key, dryrun=False):
         """Import a PGP key and if successful, return its Fingerprint.  The
         dry-run option on import is useless for some purposes as it doesn't
         report the uid's on the key.  We want more than this so we have our
@@ -215,7 +218,7 @@ class GnuPGFunctions():
         return ciphertext
 
     def signcrypt(self, recipient, senderkey, passphrase, payload,
-                  throw_key = False):
+                  throw_key=False):
         temp = tempfile.TemporaryFile()
         recipients = [recipient]
         self.reset_options()
@@ -254,14 +257,15 @@ class GnuPGFunctions():
         proc.wait()
         return ciphertext
 
+
 class GnuPGStatParse():
     """Here we try and make sense out of the GnuPG Statuses returned from the
     various GnuPG operations. The only public function that should be called
     is statparse which takes a single arguement: the GnuPG status output.
-    
+
     Output from statparse is a dictionary object containing all the pertinent
     information the function could aquire from the status text.
-    
+
     Example:
     gpg = GnupgFunctions()
     gpgparse = GnupgStatParse()
@@ -273,7 +277,8 @@ class GnuPGStatParse():
     def __init__(self):
         """Define all the regular expressions required to populate the GnuPG
         Status dictionary."""
-        # gpg: encrypted with 2048-bit ELG-E key, ID F207AEDB, created 2003-06-04
+        # gpg: encrypted with 2048-bit ELG-E key, ID F207AEDB,
+        # created 2003-06-04
         enc = "gpg: encrypted with (\d+)-bit"
         enc += " (\S+) key"
         enc += ".*ID ([0-9A-F]+)"
@@ -288,31 +293,32 @@ class GnuPGStatParse():
 
         # gpg: Good signature from "Steven Crook"
         goodsig_re = re.compile("gpg: Good signature from \"(.*)\"")
-        
+
         # gpg:                 aka "Steven Crook <steve@mixmin.net>"
         akasig_re = re.compile("gpg: +aka \"(.*)\"")
-        
-        # gpg: Signature made Sun 10 Jul 2011 12:02:04 BST using DSA key ID 228761E7
+
+        # gpg: Signature made Sun 10 Jul 2011 12:02:04 BST using DSA key ID
+        # 228761E7
         sigmade = "gpg: Signature made (.*) using (.*) key ID ([0-9A-F]+)"
         sigmade_re = re.compile(sigmade)
-        
+
         # pub   1024D/228761E7 2003-06-04
         pub_re = re.compile("pub +([^/]+)/([0-9A-F]+) ([0-9\-]+)")
-        
+
         # sub   1024D/228761E7 2003-06-04
         sub_re = re.compile("sub +([^/]+)/([0-9A-F]+) ([0-9\-]+)")
-        
+
         # Key fingerprint = 1CD9 95E1 E9CE 80D6 C885  B7EB B471 80D5 2287 61E7
         # Primary key fingerprint: 0123 4567 89AB CDEF
         fingerprint_re = re.compile("fingerprint[ :=]+([0-9A-F ]{40,})")
-        
+
         # gpg: WARNING: Using untrusted key!
         nottrusted = "gpg: WARNING: Using untrusted key!"
-        
+
         # Match a valid email address
         # TODO: This regex is too generic to be in here.
         email_re = re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
-        
+
         # This one is returned on key imports
         # gpg: Total number processed: 0
         imported = "gpg: Total number processed: "
@@ -354,7 +360,6 @@ class GnuPGStatParse():
         pattern = '%Y-%m-%d'
         return int(time.mktime(time.strptime(datestr, pattern)))
 
-
     def statparse(self, status):
         """Take a GnuPG Status message and parse it into specific dictionary
         elements. We might not capture every possible element but at least all
@@ -363,7 +368,7 @@ class GnuPGStatParse():
         # of that for us.
         lines = status.split("\n")
         lastline = None
-        gpgstat = {} # Dictionary of GPG status that we'll return
+        gpgstat = {}  # Dictionary of GPG status that we'll return
         for line in lines:
             # First we'll look for errors as there's no point populating a
             # dict that's not returned.
@@ -505,6 +510,7 @@ class GnuPGStatParse():
             # previous line to get the correct match.
             lastline = line
         return gpgstat
+
 
 def main():
     g = GnuPGFunctions("/crypt/var/nymserv/keyring")

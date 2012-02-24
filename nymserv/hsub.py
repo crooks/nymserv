@@ -17,13 +17,14 @@
 from hashlib import sha256
 from os import urandom
 
+
 class HSub():
-    def __init__(self, trimchars = 48, ivchars = 8):
+    def __init__(self, trimchars=48, ivchars=8):
         # The length in Bytes of the IV
         self.trimchars = trimchars
         self.ivchars = ivchars
 
-    def hash(self, secret, iv = None, length = None):
+    def hash(self, secret, iv=None, length=None):
         """Create an hSub (Hashed Subject). This is constructed as:
         ----------------------------------
         | iv | 256bit SHA2 'iv + secret' |
@@ -31,7 +32,7 @@ class HSub():
         In all known implementations, iv=64 bits
         The hSub may be trimmed to "length".  By default this is
         currently 48 chars in order to match eSub.
-        
+
         """
         # Generate a random IV if none is provided.
         if iv is None:
@@ -46,7 +47,7 @@ class HSub():
         """Create an hSub using a known iv, (stripped from a passed hSub).  If
         the supplied and generated hSub's collide, the message is probably for
         us.
-        
+
         """
         iv = self.hexiv(hsub)
         if not iv:
@@ -57,14 +58,14 @@ class HSub():
 
     def cryptorandom(self, numbytes):
         """Return a string of random bytes.
-        
+
         """
         return urandom(numbytes)
 
     def hexiv(self, hsub):
         """Return the decoded IV from an hsub.  By default the IV is the first
         64bits of the hsub.  As it's hex encoded, this equates to 16 digits.
-        
+
         """
         # Hex digits are twice the Byte length
         digits = self.ivchars * 2
@@ -75,10 +76,11 @@ class HSub():
             return False
         return iv
 
+
 def main():
     """Only used for testing purposes.  We Generate an hSub and then check it
     using the same input text.
-    
+
     """
     hsub = HSub(48, 8)
     passphrase = "passphrase"
