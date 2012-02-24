@@ -42,6 +42,7 @@ import nymserv.URL_Handler
 from nymserv.Config import options
 from nymserv.Config import config
 
+
 class MyDaemon(Daemon):
     def run(self):
         sleepfor = config.getint('thresholds', 'sleep_interval')
@@ -50,6 +51,7 @@ class MyDaemon(Daemon):
             pool.process()
             logging.info("Sleeping for %s seconds" % sleepfor)
             sleep(sleepfor)
+
 
 class PoolPost:
     def __init__(self, etcpath, poolpath):
@@ -103,8 +105,8 @@ class PoolPost:
             peers = self.connect_peers()
             # If there are no host connections, log it and give up.
             if len(peers) == 0:
-                logmes  = 'All %s peer connections' % len(self.hosts)
-                logmes += ' failed. Check Internet connection, it might be dead.'
+                logmes = 'All %s peer connections failed.' % len(self.hosts)
+                logmes += ' Check Internet connection, it might be dead.'
                 logging.warn(logmes)
             else:
                 self.post_files(peers, pool_files)
@@ -162,7 +164,7 @@ class PoolPost:
             # Now we offer the message to our peers and hope at least one
             # accepts.
             for host in peers:
-                o.seek(0) # Start from the beginning of our file
+                o.seek(0)  # Start from the beginning of our file
                 try:
                     peers[host].ihave(mid, o)
                     success = True
@@ -201,6 +203,7 @@ class PoolPost:
                 logging.warn(logmes)
         # Processing completed normally.
 
+
 class Mailbox():
     def process(self):
         """Parse a Maildir and pass each identified message to the Nymserver
@@ -212,9 +215,9 @@ class Mailbox():
         # After reading from inbox, failed messages are written to held.
         held = mbx.Maildir(config.get('paths', 'held'))
         logging.info("Beginning mailbox processing")
-        allcnt = 0 # Total messags parsed
-        goodcnt = 0 # Successfully processed count
-        badcnt = 0 # Failed and held count
+        allcnt = 0  # Total messags parsed
+        goodcnt = 0  # Successfully processed count
+        badcnt = 0  # Failed and held count
         for key in inbox.iterkeys():
             message = inbox.get_string(key)
             recipient = self.ascertain_recipient(message)
@@ -268,7 +271,8 @@ class Mailbox():
             else:
                 logging.info("Unwanted recipient: %s" % recipient)
                 continue
-            # When we encounter an empty line, it's the end of the header section.
+            # When we encounter an empty line, it's the end of the header
+            # section.
             if not line:
                 logmes = "We got a message with no ascertainable recipient "
                 logmes += "for the Nymserver. This probably shouldn't happen."
@@ -280,20 +284,21 @@ class Mailbox():
         logging.warn(logmes)
         return None
 
+
 class UpdateUser():
     def __init__(self):
         # Valid fields are those that are deemed user-definable.
         self.valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
-        self.alternatives = {'hash-subject'      :   'hsub',
-                             'subject-password'  :   'hsub',
-                             'hash-key'          :   'hsub'}
-        ignore_fields = ['version'] # Public keys contain "Version: "
+        self.alternatives = {'hash-subject':        'hsub',
+                             'subject-password':    'hsub',
+                             'hash-key':            'hsub'}
+        ignore_fields = ['version']  # Public keys contain "Version: "
         # We ignore the next two fields to prevent warnings about MIME content.
         ignore_fields.append("content-type")
         ignore_fields.append("content-disposition")
         self.confopt_re = re.compile('([\w\-]+?):\s*(.{1,64})$')
         self.ignore_fields = ignore_fields
-    
+
     def make_moddict(self, text):
         """Parse a block of text for lines in the format Key: Option.  Compare
         these with a list of valid fields and then construct a dictionary of
@@ -330,6 +335,7 @@ class UpdateUser():
                 moddict[field] = value
         return moddict
 
+
 class PostPrep():
     def __init__(self):
         self.hsub = nymserv.hsub.HSub(config.getint('hsub', 'length'))
@@ -344,7 +350,7 @@ class PostPrep():
         # A full hex hSub is 80 hex digits. It's trimmed to match the length of
         # other systems, such as eSub.
         mid = nymserv.strutils.messageid(config.get('domains', 'default'))
-        message  = "Path: %s\n" % config.get('nntp', 'path')
+        message = "Path: %s\n" % config.get('nntp', 'path')
         message += "From: %s\n" % config.get('nntp', 'from')
         if 'hsub' in conf and conf['hsub']:
             # We use an hsub if we've been passed one.
@@ -383,8 +389,8 @@ class PostPrep():
         """
         # We need our hsub hash in a dictionary because that's what
         # news_headers expects to receive.
-        dummy_conf = { "hsub" : hash }
-        mid, headers  = self.news_headers(dummy_conf)
+        dummy_conf = {"hsub": hash}
+        mid, headers = self.news_headers(dummy_conf)
         logging.debug("Symmetric encrypting message with key: " + key)
         enc_payload = gpg.symmetric(key, payload)
         logging.debug("Writing symmetric message to pool.")
@@ -395,7 +401,7 @@ class PostPrep():
         dictionary 'conf' contains specific formatting instructions.
 
         """
-        mid, headers  = self.news_headers(conf)
+        mid, headers = self.news_headers(conf)
         if not 'fingerprint' in conf:
             conf.close()
             logging.error('User shelve contains no fingerprint key.')
@@ -448,7 +454,6 @@ class PostPrep():
         f.close()
 
 
-
 def init_logging():
     logfmt = config.get('logging', 'format')
     datefmt = config.get('logging', 'datefmt')
@@ -457,32 +462,36 @@ def init_logging():
     logging.getLogger().setLevel(logging.DEBUG)
     logfile = logging.handlers.TimedRotatingFileHandler(
                     os.path.join(config.get('paths', 'log'), 'nymserv.log'),
-                    when = 'midnight',
-                    interval = 1,
-                    backupCount = config.getint('logging', 'retain'),
-                    utc = True)
+                    when='midnight',
+                    interval=1,
+                    backupCount=config.getint('logging', 'retain'),
+                    utc=True)
     logfile.setLevel(loglevels[config.get('logging', 'level')])
     logfile.setFormatter(logging.Formatter(logfmt, datefmt=datefmt))
     logging.getLogger().addHandler(logfile)
 
+
 def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
-    non-anonymous recipient."""
-    payload  = "From: send@" + config.get('domains', 'default') + "\n"
+    non-anonymous recipient.
+
+    """
+    payload = "From: send@" + config.get('domains', 'default') + "\n"
     payload += "To: " + msg['From'] + "\n"
     payload += "Subject: Delivery Notification for " + msg['To'] + "\n"
     payload += "Date: " + msg['Date'] + "\n"
     payload += "\n"
     payload += "Your email to " + msg['To'] + " was sent.\n"
     if 'Cc' in msg:
-        payload += "It was copied to " + msg['Cc'] + "\n" 
+        payload += "It was copied to " + msg['Cc'] + "\n"
     payload += "The Subject was: " + msg['Subject'] + "\n"
     payload += "The Message-ID was: " + msg['Message-ID'] + "\n"
     return payload
 
+
 def create_success_message(userconf):
     "Respond to a successful Nym create request."
-    payload  = "Congratulations!\n"
+    payload = "Congratulations!\n"
     payload += nymserv.strutils.underline('-', payload)
     payload += "You have registered the pseudonym %(address)s.\n" % userconf
     payload += """
@@ -510,9 +519,10 @@ alt.anonymous.messages, formatted in accordance with your request.\n\n"""
     payload += optstring(userconf)
     return payload
 
+
 def delete_success_message(email):
     "Respond to a successful Nym delete request."
-    payload  = "Nym Deletion in progress!\n"
+    payload = "Nym Deletion in progress!\n"
     payload += nymserv.strutils.underline('-', payload)
     payload += "Your nym " + email + " is now being deleted.\n"
     payload += """
@@ -523,17 +533,19 @@ deleted.  Should you decide to recreate the Nym, it will begin with a default
 configuration.  Good-Bye, it's been good!\n"""
     return payload
 
+
 def modify_success_message(userconf):
     "Respond to successful Nym modification request."
-    payload  = "Nym Modification Successful\n"
+    payload = "Nym Modification Successful\n"
     payload += nymserv.strutils.underline('-', payload)
     payload += "You have successfully modified your "
     payload += "pseudonym %(address)s.\n\n" % userconf
     payload += optstring(userconf)
     return payload
 
+
 def duplicate_message(keyid, addy):
-    payload  = "Error - Duplicate Nym Address " + addy + ".\n"
+    payload = "Error - Duplicate Nym Address " + addy + ".\n"
     payload += nymserv.strutils.underline('-', payload)
     payload += """
 You attempted to register a Nym that already exists on the server.  You are
@@ -544,8 +556,9 @@ address.  Hence, the email address must be unique.\n"""
     payload += "will now be deleted from the server.\n"
     return payload
 
+
 def reserved_message(keyid, addy):
-    payload  = 'Error - ' + addy + " is a reserved Nym.\n"
+    payload = 'Error - ' + addy + " is a reserved Nym.\n"
     payload += nymserv.strutils.underline('-', payload)
     payload += """
 You attempted to register a reserved Nym name.  You are receiving this response
@@ -554,6 +567,7 @@ but the Nym will not be functional.\n"""
     payload += "\nThe key " + keyid + " "
     payload += "will now be deleted from the server.\n"
     return payload
+
 
 def send_no_recipient_message(email, subject):
     payload = 'Error: Message not sent\n'
@@ -576,15 +590,18 @@ to prove you were the genuine originator of the message.  A failed signature
 would prevent this response to your Nym.\n'''
     return payload
 
+
 def no_url_message(url):
     payload = 'Error: Could not retrieve ' + url
     return payload
+
 
 def optstring(userconf):
     optstring = "The options currently configured on your Nym are:-\n\n"
     for key in sorted(userconf.iterkeys()):
         optstring += '%s: %s\n' % (key, userconf[key])
     return optstring
+
 
 def email_message(sender_email, recipient_string, message):
     """Take a sender email address and a To header-like string of
@@ -593,16 +610,17 @@ def email_message(sender_email, recipient_string, message):
     server = smtplib.SMTP('localhost')
     for recipient in recipients:
         name, addy = email.utils.parseaddr(recipient)
-        logmessage  = 'Sending email from ' + sender_email
+        logmessage = 'Sending email from ' + sender_email
         logmessage += ' to ' + addy + '.'
         logging.info(logmessage)
         try:
             server.sendmail(sender_email, addy, message.as_string())
         except:
-            logmessage  = 'Sending email to ' + addy
+            logmessage = 'Sending email to ' + addy
             logmessage += ' failed with error %s.' % sys.exc_info()[1]
             logging.info(logmessage)
     server.quit()
+
 
 def getuidmails(uidmails):
     """Take a list of email addresses and strip out any that aren't for our
@@ -616,6 +634,7 @@ def getuidmails(uidmails):
         if domain in doms:
             gooduids.append(uid)
     return gooduids
+
 
 def msgparse(recipient, message):
     "Parse a received email."
@@ -670,6 +689,7 @@ def msgparse(recipient, message):
         processed = process_url(payload)
     return processed
 
+
 def process_config(result, payload):
     sigstat = gpgparse.statparse(result)
     if 'goodsig' in sigstat and sigstat['goodsig']:
@@ -707,7 +727,7 @@ def process_config(result, payload):
         else:
             # This is what we require.  Just a single, valid uid for one of
             # our recognized domains.
-            sigfor = uids[0] # Assign our one and only uid to sigfor.
+            sigfor = uids[0]  # Assign our one and only uid to sigfor.
             logmes = "Got a key with one valid UID of: %s." % sigfor
             logging.debug(logmes)
             if 'fingerprint' in sigstat:
@@ -735,7 +755,7 @@ def process_config(result, payload):
         # We import the key to obtain its secrets, like keyid and uids.
         # By setting dryrun=True, the key isn't imported to our
         # real keyring. That will happen later if it passes scrutiny.
-        result = gpg.import_key(payload, dryrun = True)
+        result = gpg.import_key(payload, dryrun=True)
         testimpstat = gpgparse.statparse(result)
         # Here we check how many keys were imported. Only one is
         # considered valid.
@@ -811,7 +831,7 @@ def process_config(result, payload):
             res_message = reserved_message(importstat['keyid'], sigfor)
             # In this instance there is no valid userconf shelve to read so we
             # create a false one to satisfy post_message().
-            conf = {'fingerprint' : fingerprint}
+            conf = {'fingerprint': fingerprint}
             postprep.post_message(res_message, conf)
             gpg.delete_key(fingerprint)
             logging.info("%s is a reserved Nym. Deleted key." % nym)
@@ -836,7 +856,7 @@ def process_config(result, payload):
                 logging.info("It's a duplicate, not accepting it.")
                 dup_message = duplicate_message(importstat['keyid'], sigfor)
                 # Create a false userconf as this isn't a valid user.
-                conf = {'fingerprint' : fingerprint}
+                conf = {'fingerprint': fingerprint}
                 postprep.post_message(dup_message, conf)
                 gpg.delete_key(fingerprint)
                 logmes = "%s: Requested but already exists. " % sigfor
@@ -862,7 +882,7 @@ def process_config(result, payload):
         filename = os.path.join(config.get('paths', 'user'),
                                 sigfor + '.key')
         f = open(filename, 'w')
-        f.write(gpg.export(fingerprint) + '\n') 
+        f.write(gpg.export(fingerprint) + '\n')
         f.close()
         os.chmod(filename, 0600)
 
@@ -889,7 +909,7 @@ def process_config(result, payload):
     moddict = updusr.make_moddict(payload)
     # Does the mod request include a Delete statement?
     if 'delete' in moddict and moddict['delete'].lower() == 'yes':
-        logmessage  = sigfor + ": Starting delete process "
+        logmessage = sigfor + ": Starting delete process "
         logmessage += "at user request."
         logging.info(logmessage)
         delete_nym(sigfor, userconf)
@@ -900,11 +920,11 @@ def process_config(result, payload):
         # The following condition only dictates which logmessage to
         # write.  The dictionary is updated regardless.
         if key in userconf:
-            logmes  = 'Changing key %s from %s' % (key, userconf[key])
+            logmes = 'Changing key %s from %s' % (key, userconf[key])
             logmes += ' to %s.' % moddict[key]
             logging.debug(logmes)
         else:
-            logmes  = 'Inserting key %s' % key
+            logmes = 'Inserting key %s' % key
             logmes += ' with value %s.' % moddict[key]
             logging.debug(logmes)
         userconf[key] = moddict[key]
@@ -927,6 +947,7 @@ def process_config(result, payload):
     postprep.post_message(reply_message, userconf)
     userconf.close()
     return True
+
 
 def process_send(result, payload):
     logging.debug('Message received for forwarding.')
@@ -964,7 +985,7 @@ def process_send(result, payload):
     else:
         # This is what we require.  Just a single, valid uid for one of
         # our recognized domains.
-        sigfor = uids[0] # Assign our one and only uid to sigfor.
+        sigfor = uids[0]  # Assign our one and only uid to sigfor.
         logmes = "Got a key with one valid UID of: %s." % sigfor
         logging.debug(logmes)
         if 'fingerprint' not in sigstat:
@@ -1028,7 +1049,7 @@ def process_send(result, payload):
         logging.debug('Using provided Message-ID')
     else:
         send_mid = nymserv.strutils.messageid(config.get('domains', 'default'))
-        logmes  = 'Generating Message-ID ' + send_mid
+        logmes = 'Generating Message-ID ' + send_mid
         logmes += ' for outbound message.'
         logging.info(logmes)
         send_msg['Message-ID'] = send_mid
@@ -1056,7 +1077,7 @@ def process_send(result, payload):
     if not 'last_sent' in userconf:
         # We've never sent a message, we have now!
         userconf['last_sent'] = today
-    elif userconf['last_sent'] <> today:
+    elif userconf['last_sent'] != today:
         # If the last time we sent a message wasn't today, sent_today needs
         # resetting.
         logging.debug('Resetting Sent Today count to zero')
@@ -1067,18 +1088,19 @@ def process_send(result, payload):
         userconf['sent_today'] += 1
     else:
         userconf['sent_today'] = 1
-    logmes =  '%s has sent %d' % (sigfor, userconf['sent_today'])
+    logmes = '%s has sent %d' % (sigfor, userconf['sent_today'])
     logmes += ' messages today and %d in total.' % userconf['sent']
     logging.debug(logmes)
     if userconf['sent_today'] > config.getint('thresholds',
                                               'daily_send_limit'):
         userconf['block_sends'] = True
-        logmes =  '%s has exceeded daily sending allowance.' % sigfor
+        logmes = '%s has exceeded daily sending allowance.' % sigfor
         logmes += ' Sending is now disabled until manual intervention'
         logmes += ' re-enables it.'
         logging.warn(logmes)
     userconf.close()
     return True
+
 
 def process_url(payload):
     logging.debug('Received message requesting a URL.')
@@ -1088,10 +1110,11 @@ def process_url(payload):
         # Malformed URL request, log and delete as there's not much else we
         # can do about it.
         logging.info(e)
-        return True 
+        return True
     mime_msg = urlhandler.fetch_and_prep(urls)
     postprep.post_symmetric_message(mime_msg, hsubhash, key)
     return True
+
 
 def delete_nym(email, userconf):
     # First we make an in-memory copy of the user conf as we're about to delete
@@ -1119,6 +1142,7 @@ def delete_nym(email, userconf):
     logging.info('Deletion process complete.')
     return True
 
+
 def stdout_user(user):
     """Respond to a --list <email> request with a list of configuration
     options for the given user."""
@@ -1128,12 +1152,13 @@ def stdout_user(user):
         sys.exit(1)
     userconf = shelve.open(userfile)
     today = nymserv.strutils.datestr()
-    if 'last_sent' in userconf and userconf['last_sent'] <> today:
+    if 'last_sent' in userconf and userconf['last_sent'] != today:
         userconf['sent_today'] = 0
     for key in userconf:
         sys.stdout.write('%s: %s\n' % (key, userconf[key]))
     userconf.close()
     sys.exit(0)
+
 
 def delete(email):
     from os import remove
@@ -1156,6 +1181,7 @@ def delete(email):
     sys.stdout.write(logmes)
     sys.exit(1)
 
+
 def cleanup():
     resfile = os.path.join(config.get('paths', 'etc'), 'reserved_nyms')
     reserved_nyms = nymserv.strutils.file2list(resfile)
@@ -1172,11 +1198,12 @@ def cleanup():
                 userconf['address'] = nym
             if not os.path.isfile(keyfile):
                 f = open(keyfile, 'w')
-                f.write(gpg.export(userconf['fingerprint']) + '\n') 
+                f.write(gpg.export(userconf['fingerprint']) + '\n')
                 f.close()
             userconf.close()
             sys.stdout.write(nym + "\n")
-    sys.exit(0)    
+    sys.exit(0)
+
 
 def main():
     if options.cleanup:
@@ -1213,16 +1240,13 @@ if (__name__ == "__main__"):
             os.path.join(config.get('paths', 'pid'), 'nymserv.pid'),
             '/dev/null',
             '/dev/null',
-            os.path.join(config.get('paths', 'log'), 'nymserv.err')
-            )
+            os.path.join(config.get('paths', 'log'), 'nymserv.err'))
     updusr = UpdateUser()
     pool = PoolPost(config.get('paths', 'etc'),
-                    config.get('paths', 'pool')
-                   )
+                    config.get('paths', 'pool'))
     postprep = PostPrep()
     gpg = nymserv.gnupg.GnuPGFunctions(config.get('paths', 'keyring'))
     gpgparse = nymserv.gnupg.GnuPGStatParse()
     urlhandler = nymserv.URL_Handler.URL()
     mailbox = Mailbox()
     main()
-

@@ -40,6 +40,7 @@ def makedir(d):
             sys.stdout.write(msg)
             sys.exit(1)
 
+
 def set_passphrase():
     """Passphrase simply contains the GnuPG Passphrase for the Nymserver's
     private key.  It can be defined in the config file but reading it on each
@@ -51,7 +52,7 @@ def set_passphrase():
     if not config.has_option('pgp', 'passphrase'):
         msg = "%s: Enter secret passphrase: " % config.get('pgp', 'key')
         config.set('pgp', 'passphrase', raw_input(msg))
-    
+
 
 # OptParse comes first as ConfigParser depends on it to override the path to
 # the config file.
