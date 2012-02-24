@@ -23,6 +23,7 @@ import cStringIO
 import email
 import email.utils
 import logging
+import logging.handlers
 import mailbox as mbx
 import nntplib
 import os
@@ -449,13 +450,20 @@ class PostPrep():
 
 
 def init_logging():
+    logfmt = config.get('logging', 'format')
+    datefmt = config.get('logging', 'datefmt')
     loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
                 'warn': logging.WARN, 'error': logging.ERROR}
-    logging.basicConfig(
-        filename=os.path.join(config.get('paths', 'log'), 'nymserv.log'),
-        level = loglevels[config.get('logging', 'level')],
-        format = '%(asctime)s %(process)d %(levelname)s %(message)s',
-        datefmt = '%Y-%m-%d %H:%M:%S')
+    logging.getLogger().setLevel(logging.DEBUG)
+    logfile = logging.handlers.TimedRotatingFileHandler(
+                    os.path.join(config.get('paths', 'log'), 'nymserv.log'),
+                    when = 'midnight',
+                    interval = 1,
+                    backupCount = config.getint('logging', 'retain'),
+                    utc = True)
+    logfile.setLevel(loglevels[config.get('logging', 'level')])
+    logfile.setFormatter(logging.Formatter(logfmt, datefmt=datefmt))
+    logging.getLogger().addHandler(logfile)
 
 def send_success_message(msg):
     """Post confirmation that an email was sent through the Nymserver to a
@@ -905,7 +913,7 @@ def process_config(result, payload):
         # Add (or update) the modified date in the user configuration
         userconf['modified'] = nymserv.strutils.datestr()
     elif not modified and not created:
-       logging.info("%s: Nothing modified. Sending status." % sigfor)
+        logging.info("%s: Nothing modified. Sending status." % sigfor)
     # Everyone should have their address in the user configuration
     if not 'address' in userconf:
         logging.debug("Adding address to userconf.")

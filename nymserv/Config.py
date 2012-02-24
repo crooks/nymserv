@@ -90,6 +90,9 @@ homedir = os.path.expanduser('~')
 # Logging
 config.add_section('logging')
 config.set('logging', 'level', 'info')
+config.set('logging', 'format', '%(asctime)s %(levelname)s %(message)s')
+config.set('logging', 'datefmt', '%Y-%m-%d %H:%M:%S')
+config.set('logging', 'retain', 7)
 
 # Config options for NNTP Posting
 config.add_section('nntp')
