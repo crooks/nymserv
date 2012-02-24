@@ -18,6 +18,7 @@
 # for more details.
 
 import ConfigParser
+import getpass
 from optparse import OptionParser
 import os
 import sys
@@ -51,7 +52,7 @@ def set_passphrase():
     """
     if not config.has_option('pgp', 'passphrase'):
         msg = "%s: Enter secret passphrase: " % config.get('pgp', 'key')
-        config.set('pgp', 'passphrase', raw_input(msg))
+        config.set('pgp', 'passphrase', getpass.getpass(msg))
 
 
 # OptParse comes first as ConfigParser depends on it to override the path to
