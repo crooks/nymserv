@@ -653,7 +653,7 @@ def msgparse(recipient, message):
         if not recipient in nymlist:
             logging.info('Unknown recipient %s.' % recipient)
             return True
-        userfile = os.path.join(config.get('paths', 'user'),
+        userfile = os.path.join(config.get('paths', 'users'),
                                 recipient + '.db')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
@@ -838,7 +838,7 @@ def process_config(result, payload):
             logging.info("%s is a reserved Nym. Deleted key." % nym)
             return True
 
-        userfile = os.path.join(config.get('paths', 'user'),
+        userfile = os.path.join(config.get('paths', 'users'),
                                 sigfor + '.db')
         if os.path.isfile(userfile):
             logmes = "%s: This nym already has a DB file. " % sigfor
@@ -880,7 +880,7 @@ def process_config(result, payload):
         userconf['created'] = nymserv.strutils.datestr()
         userconf['address'] = sigfor
         # Write the public key to a file, just in case we ever need it.
-        filename = os.path.join(config.get('paths', 'user'),
+        filename = os.path.join(config.get('paths', 'users'),
                                 sigfor + '.key')
         f = open(filename, 'w')
         f.write(gpg.export(fingerprint) + '\n')
@@ -895,7 +895,7 @@ def process_config(result, payload):
     logging.debug('%s: Entering config modify routine.' % sigfor)
     if not created:
         # If we haven't done a create, the userconf isn't open yet.
-        userfile = os.path.join(config.get('paths', 'user'),
+        userfile = os.path.join(config.get('paths', 'users'),
                                 sigfor + '.db')
         # This is a modify process, the user file must already exist.
         if os.path.isfile(userfile):
@@ -1023,7 +1023,7 @@ def process_send(result, payload):
     else:
         logging.info('No From header in payload, using signature.')
         send_msg['From'] = sigfor
-    userfile = os.path.join(config.get('paths', 'user'),
+    userfile = os.path.join(config.get('paths', 'users'),
                             sigfor + '.db')
     if os.path.exists(userfile):
         userconf = shelve.open(userfile)
@@ -1126,8 +1126,8 @@ def delete_nym(email, userconf):
     # We now have an in-memory copy so we can close the shelve and delete it.
     userconf.close()
     from os import remove
-    keyfile = os.path.join(config.get('paths', 'user'), email + '.key')
-    userfile = os.path.join(config.get('paths', 'user'), email + '.db')
+    keyfile = os.path.join(config.get('paths', 'users'), email + '.key')
+    userfile = os.path.join(config.get('paths', 'users'), email + '.db')
     if os.path.exists(userfile):
         logging.info('Deleting userfile: ' + userfile)
         remove(userfile)
@@ -1147,7 +1147,7 @@ def delete_nym(email, userconf):
 def stdout_user(user):
     """Respond to a --list <email> request with a list of configuration
     options for the given user."""
-    userfile = os.path.join(config.get('paths', 'user'), user + '.db')
+    userfile = os.path.join(config.get('paths', 'users'), user + '.db')
     if not os.path.exists(userfile):
         sys.stdout.write(userfile + ': File not found\n')
         sys.exit(1)
@@ -1163,8 +1163,8 @@ def stdout_user(user):
 
 def delete(email):
     from os import remove
-    keyfile = os.path.join(config.get('paths', 'user'), email + '.key')
-    userfile = os.path.join(config.get('paths', 'user'), email + '.db')
+    keyfile = os.path.join(config.get('paths', 'users'), email + '.key')
+    userfile = os.path.join(config.get('paths', 'users'), email + '.db')
     if os.path.exists(userfile):
         sys.stdout.write('Deleting userfile: %s\n' % userfile)
         remove(userfile)
@@ -1191,8 +1191,8 @@ def cleanup():
         addy, domain = nym.split("@", 1)
         if addy in reserved_nyms:
             continue
-        userfile = os.path.join(config.get('paths', 'user'), nym + '.db')
-        keyfile = os.path.join(config.get('paths', 'user'), nym + '.key')
+        userfile = os.path.join(config.get('paths', 'users'), nym + '.db')
+        keyfile = os.path.join(config.get('paths', 'users'), nym + '.key')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
             if not 'address' in userconf:
