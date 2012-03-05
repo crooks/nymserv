@@ -69,9 +69,12 @@ class URL():
             opt, val = strutils.optparse(line)
             if opt == "source" or opt == "url":
                 if not val in urls:
-                    if not val.startswith("http://"):
-                        val = "http://%s" % val
-                    urls.append(val)
+                    if val.startswith("http://"):
+                        urls.append(val)
+                    elif val.startswith("https://"):
+                        urls.append(val)
+                    else:
+                        urls.append("http://%s" % val)
             if opt == "key":
                 key = val
             if opt == "hsub":

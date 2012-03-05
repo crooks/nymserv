@@ -4,3 +4,4 @@ v0.2, --date--
 o Add log rotation functionality.  This prevents having to rotate the daemon
   and consequently, re-enter the passphrase.
 o Use getpass module instead of raw_input for passphrase prompt.
+o Don't prepend https url requests with http://.
