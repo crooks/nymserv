@@ -69,6 +69,8 @@ parser.add_option("--cleanup", dest="cleanup", action="store_true",
                       default=False, help="Perform some housekeeping")
 parser.add_option("--delete", dest="delete",
                       help="Delete a user account and key")
+parser.add_option("--expire", dest="expire", action="store_true",
+                      help="Delete all nyms with expired keys")
 parser.add_option("--process", dest="process", action="store_true",
                       help="Process the Maildir in current console session")
 parser.add_option("--start", dest="start", action="store_true",

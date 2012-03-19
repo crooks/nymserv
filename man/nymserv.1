@@ -7,7 +7,7 @@ nymserv \- Pseudonymous email service
 .SH SYNOPSIS
 .B nymserv
 { --start | --stop | --restart | --help |--process | --delete |
-  --recipient | --help }
+  --recipient | --expire | --help }
 .SH DESCRIPTION
 .B nymserv
 is a Python based pseudonymous email server based on \fBGnuPG\fP.  It's role
@@ -47,6 +47,10 @@ An interactive option to display the configuration details of a specific Nym.
 .B --delete <nym_address>
 An interactive opion to delete a Nym.  This option will remove any reference
 to that Nym, including its configuration and public key.
+.TP
+.B --expire
+An interactive command that will delete any nyms with expired keys.  As the
+server will refuse to encrypt to such keys, they are considered dead.
 .TP
 .B [-r | --recipient] <recipent_address>
 Force the nymserver to assume the message is for the defined recipient instead

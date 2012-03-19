@@ -1169,19 +1169,24 @@ def delete(email):
         sys.stdout.write('Deleting userfile: %s\n' % userfile)
         remove(userfile)
     if os.path.exists(keyfile):
-        logging.info('Deleting keyfile: %s\n' % keyfile)
+        sys.stdout.write('Deleting keyfile: %s\n' % keyfile)
         remove(keyfile)
     sys.stdout.write("Deleting key: %s\n" % email)
     fp = gpg.fingerprint(email)
     sys.stdout.write("Fingerprint for %s is %s\n" % (email, fp))
-    if fp is not None:
+    if fp is None:
+        logmes = "%s: Key not deleted, " % fp
+        logmes += "unable to determine Fingerprint.\n"
+        sys.stdout.write(logmes)
+    else:
         gpg.delete_key(fp)
         sys.stdout.write("%s: Deleted\n" % fp)
-        sys.exit(0)
-    logmes = "%s: Key not deleted, unable to determine Fingerprint.\n" % fp
-    sys.stdout.write(logmes)
-    sys.exit(1)
 
+def expire():
+    for k in gpg.emails_to_list():
+        gpgparse.statparse(gpg.keyinfo(k))
+        if 'expired' in gpgparse:
+            delete(k)
 
 def cleanup():
     resfile = os.path.join(config.get('paths', 'etc'), 'reserved_nyms')
@@ -1213,6 +1218,8 @@ def main():
         stdout_user(options.list)
     elif options.delete:
         delete(options.delete)
+    elif options.expire:
+        expire()
     elif options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
         logging.info("Processing message for hardcoded recipient %s" % \
