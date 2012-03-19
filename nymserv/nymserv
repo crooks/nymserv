@@ -692,8 +692,8 @@ def msgparse(recipient, message):
 
 
 def process_config(result, payload):
-    sigstat = gpgparse.statparse(result)
-    if 'goodsig' in sigstat and sigstat['goodsig']:
+    gpgparse.statparse(result)
+    if 'goodsig' in gpgparse and gpgparse['goodsig']:
         # At this point, we cannot be dealing with a create message. We
         # know the key in order to have verified the signature.
 
@@ -703,25 +703,25 @@ def process_config(result, payload):
         # message for a create needs to be different.
         created = False
 
-        if 'uidmail' not in sigstat:
+        if 'uidmail' not in gpgparse:
             # No good having a signed message without an email address.
-            logmes = "No email addresses on key: %(keyid)s." % sigstat
+            logmes = "No email addresses on key: %(keyid)s." % gpgparse
             logging.warn(logmes)
             return False
         # We pass the last check so there are email uid's on the signature.
         # Let's now check if any of them are for our domains.
-        uids = getuidmails(sigstat['uidmail'])
+        uids = getuidmails(gpgparse['uidmail'])
         if len(uids) > 1:
             # We can't handle keys with multiple emails for our domains.
             # TODO There should be a return message to the key owner.
-            logmes = "%(keyid)s: Ambiguous key. " % sigstat
+            logmes = "%(keyid)s: Ambiguous key. " % gpgparse
             logmes += "Multiple uid matches."
             logging.warn(logmes)
             return False
         elif len(uids) < 1:
             # We need a valid email address for the nym to receive email.
             # TODO There should be a return message to the key owner.
-            logmes = "%(keyid)s: Key contains no uids for our " % sigstat
+            logmes = "%(keyid)s: Key contains no uids for our " % gpgparse
             logmes += "domains."
             logging.warn(logmes)
             return False
@@ -731,11 +731,11 @@ def process_config(result, payload):
             sigfor = uids[0]  # Assign our one and only uid to sigfor.
             logmes = "Got a key with one valid UID of: %s." % sigfor
             logging.debug(logmes)
-            if 'fingerprint' in sigstat:
-                fingerprint = sigstat['fingerprint']
+            if 'fingerprint' in gpgparse:
+                fingerprint = gpgparse['fingerprint']
             else:
                 # We should always get a fingerprint from a signed message
-                logmes = "%(keyid)s Signed key but without " % sigstat
+                logmes = "%(keyid)s Signed key but without " % gpgparse
                 logmes += "fingerprint. Status reported was:\n"
                 logmes += result
                 logging.error(logmes)
@@ -757,19 +757,19 @@ def process_config(result, payload):
         # By setting dryrun=True, the key isn't imported to our
         # real keyring. That will happen later if it passes scrutiny.
         result = gpg.import_key(payload, dryrun=True)
-        testimpstat = gpgparse.statparse(result)
+        gpgparse.statparse(result)
         # Here we check how many keys were imported. Only one is
         # considered valid.
-        if 'imported' not in testimpstat:
+        if 'imported' not in gpgparse:
             logging.error("No 'imported' returned by importstat.")
             return False
         elif testimpstat['imported'] > 1:
-            logmes = "%(imported)s keys imported. " % testimpstat
+            logmes = "%(imported)s keys imported. " % gpgparse
             logmes += "We don't allow more than one."
             logging.warn(logmes)
             return False
-        elif testimpstat['imported'] == 1 and 'keyid' in testimpstat:
-            logmes = "Imported key %(keyid)s has a single UID. " % testimpstat
+        elif gpgparse['imported'] == 1 and 'keyid' in gpgparse:
+            logmes = "Imported key %(keyid)s has a single UID. " % gpgparse
             logmes += "Excellent! Proceeding with import process."
             logging.info(logmes)
         else:
@@ -779,14 +779,14 @@ def process_config(result, payload):
             return False
         # By now we know a single key was imported, but how many valid
         # uids are on it?
-        uids = getuidmails(testimpstat['uidmail'])
+        uids = getuidmails(gpgparse['uidmail'])
         if len(uids) == 1:
             sigfor = uids[0]
-            logmes = "Test imported KeyID %(keyid)s for " % testimpstat
+            logmes = "Test imported KeyID %(keyid)s for " % gpgparse
             logmes += "email address %s." % sigfor
             logging.info(logmes)
         elif len(uids) > 1:
-            logmes = "More than one valid uid on %(keyid)s. " % testimpstat
+            logmes = "More than one valid uid on %(keyid)s. " % gpgparse
             logmes = "We can't allow that as each key must have a single "
             logmes = "unique identifier."
             logging.warn(logmes)
@@ -808,18 +808,18 @@ def process_config(result, payload):
         logging.info("Importing %s. This time for real." % sigfor)
         result = gpg.import_key(payload)
         logging.debug("Import result was:\n%s" % result)
-        importstat = gpgparse.statparse(result)
-        logging.debug("Imported Keyid: %s" % importstat['keyid'])
-        if 'fingerprint' in importstat:
-            fingerprint = importstat['fingerprint']
+        gpgparse.statparse(result)
+        logging.debug("Imported Keyid: %s" % gpgparse['keyid'])
+        if 'fingerprint' in gpgparse:
+            fingerprint = gpgparse['fingerprint']
         else:
             logmes = "Fingerprint not obtained during import. Requesting "
             logmes += "it now."
             logging.debug(logmes)
-            fingerprint = gpg.fingerprint(importstat['keyid'])
+            fingerprint = gpg.fingerprint(gpgparse['keyid'])
             if fingerprint is None:
                 logmes = "Failed to obtain fingerprint for "
-                logmes += "%(keyid)s" % importstat
+                logmes += "%(keyid)s" % gpgparse
                 logging.error(logmes)
                 return False
         logging.debug("Imported fingerprint is %s." % fingerprint)
@@ -829,7 +829,7 @@ def process_config(result, payload):
         reserved_nyms = nymserv.strutils.file2list(resfile)
         nym, domain = sigfor.split("@", 1)
         if nym in reserved_nyms:
-            res_message = reserved_message(importstat['keyid'], sigfor)
+            res_message = reserved_message(gpgparse['keyid'], sigfor)
             # In this instance there is no valid userconf shelve to read so we
             # create a false one to satisfy post_message().
             conf = {'fingerprint': fingerprint}
@@ -953,11 +953,11 @@ def process_config(result, payload):
 def process_send(result, payload):
     logging.debug('Message received for forwarding.')
     # We send messages for Nymholders after verifying their signature.
-    sigstat = gpgparse.statparse(result)
-    if 'goodsig' not in sigstat or not sigstat['goodsig']:
+    gpgparse.statparse(result)
+    if 'goodsig' not in gpgparse or not gpgparse['goodsig']:
         logging.info("Only verified signatures can send messages.")
         return True
-    if 'uidmail' not in sigstat:
+    if 'uidmail' not in gpgparse:
         # No good having a signed message without an email address.
         logmes = "We verified a signature, meaning we accepted is once, but "
         logmes += "it has no valid email uids for our domains. This requires "
@@ -966,7 +966,7 @@ def process_send(result, payload):
         logging.error(logmes)
         return False
     # There are uids on the gpg status, we have a signed message.
-    uids = getuidmails(sigstat['uidmail'])
+    uids = getuidmails(gpgparse['uidmail'])
     if len(uids) > 1:
         # We can't handle keys with multiple emails for our domains.
         logmes = "Well this shouldn't happen! During nym creation we "
@@ -989,7 +989,7 @@ def process_send(result, payload):
         sigfor = uids[0]  # Assign our one and only uid to sigfor.
         logmes = "Got a key with one valid UID of: %s." % sigfor
         logging.debug(logmes)
-        if 'fingerprint' not in sigstat:
+        if 'fingerprint' not in gpgparse:
             # We should always get a fingerprint from a signed message
             logmes = "%(keyid)s Signed key but without " % sigstat
             logmes += "fingerprint. Status reported was:\n"
@@ -997,7 +997,7 @@ def process_send(result, payload):
             logging.error(logmes)
             return False
         else:
-            fingerprint = sigstat['fingerprint']
+            fingerprint = gpgparse['fingerprint']
 
     # For Reference:
     # foo_from = Entire freeformat header (Foo <foo@bar.org>).
