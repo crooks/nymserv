@@ -763,7 +763,7 @@ def process_config(result, payload):
         if 'imported' not in gpgparse:
             logging.error("No 'imported' returned by importstat.")
             return False
-        elif testimpstat['imported'] > 1:
+        elif gpgparse['imported'] > 1:
             logmes = "%(imported)s keys imported. " % gpgparse
             logmes += "We don't allow more than one."
             logging.warn(logmes)
