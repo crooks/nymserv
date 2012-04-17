@@ -855,7 +855,7 @@ def process_config(result, payload):
                 return True
             else:
                 logging.info("It's a duplicate, not accepting it.")
-                dup_message = duplicate_message(importstat['keyid'], sigfor)
+                dup_message = duplicate_message(gpgparse['keyid'], sigfor)
                 # Create a false userconf as this isn't a valid user.
                 conf = {'fingerprint': fingerprint}
                 postprep.post_message(dup_message, conf)
