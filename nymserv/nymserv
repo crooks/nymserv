@@ -610,6 +610,7 @@ def email_message(sender_email, recipient_string, message):
     recipients = recipient_string.split(',')
     server = smtplib.SMTP('localhost')
     for recipient in recipients:
+        logging.info("Sending email to %s" % recipient)
         name, addy = email.utils.parseaddr(recipient)
         logmessage = 'Sending email from ' + sender_email
         logmessage += ' to ' + addy + '.'
