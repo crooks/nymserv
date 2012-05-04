@@ -33,6 +33,7 @@ import shelve
 import smtplib
 import socket
 import sys
+import traceback
 # My libraries
 from nymserv.daemon import Daemon
 import nymserv.gnupg
@@ -47,8 +48,14 @@ class MyDaemon(Daemon):
     def run(self):
         sleepfor = config.getint('thresholds', 'sleep_interval')
         while True:
-            mailbox.process()
-            pool.process()
+            try:
+                mailbox.process()
+                pool.process()
+            except:
+                fn = os.path.join(config.get('paths', 'log'), 'traceback')
+                f = open(fn, 'a')
+                traceback.print_exc(file=f)
+                f.close()
             logging.info("Sleeping for %s seconds" % sleepfor)
             sleep(sleepfor)
 
@@ -220,14 +227,15 @@ class Mailbox():
         goodcnt = 0  # Successfully processed count
         badcnt = 0  # Failed and held count
         for key in inbox.iterkeys():
-            message = inbox.get_string(key)
-            recipient = self.ascertain_recipient(message)
             allcnt += 1
-            if recipient is None:
-                processed = False
+            message = inbox.get_string(key)
+            try:
+                recipient = self.ascertain_recipient(message)
+            except EOFError:
+                heldkey = held.add(message)
                 badcnt += 1
-            else:
-                processed = msgparse(recipient, message)
+                continue
+            processed = msgparse(recipient, message)
             if processed:
                     goodcnt += 1
             else:
@@ -275,15 +283,16 @@ class Mailbox():
             # When we encounter an empty line, it's the end of the header
             # section.
             if not line:
-                logmes = "We got a message with no ascertainable recipient "
-                logmes += "for the Nymserver. This probably shouldn't happen."
+                logmes = "End or header section reached without finding an "
+                logmes = "ascertainable recipient for the Nymserver. This "
+                logmes = "probably shouldn't happen."
                 logging.warn(logmes)
-                return None
+                raise EOFError, "No recipient found"
         logmes = "Unable to ascertain a recipient for this message. "
         logmes += "End of message was reached without finding a recipient "
         logmes += "or a blank line after the headers."
         logging.warn(logmes)
-        return None
+        raise EOFError, "No recipient found"
 
 
 class UpdateUser():
