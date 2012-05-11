@@ -29,8 +29,17 @@ class Error(Exception):
     pass
 
 
-class GnupgError(Error):
-    """GnuPG Verification Errors"""
+class DecryptError(Error):
+    """GnuPG Decrypt Errors"""
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return repr(self.expr)
+
+
+class PGPKeyError(Error):
+    """Generic issues related to keys and their fields."""
     def __init__(self, expr):
         self.expr = expr
 
@@ -46,7 +55,7 @@ class GnuPGFunctions():
             homedir = os.path.expanduser('~')
             keyring = os.path.join(homedir, '.gnupg')
         if not os.path.isdir(keyring):
-            raise GnupgError("Keyring directory not found.")
+            raise IOError, "Keyring directory not found."
         self.keyring = keyring
         self.email_re = \
           re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
@@ -396,6 +405,9 @@ class GnuPGStatParse():
     def __iter__(self):
         return iter(self.gpgstat)
 
+    def __setitem__(self, key, item):
+        self.gpgstat[key] = item
+
     def _strip_gpg(self, text):
         gpg, rest = text.split(": ", 1)
         return rest
@@ -419,8 +431,9 @@ class GnuPGStatParse():
         those we need to perform effective validation.
 
         """
-        # Dictionary of GPG status that we'll return
-        self.gpgstat = {}
+        # Dictionary of GPG status that external programs will interrogate.
+        # First into this is the raw status message that GnuPG returns.
+        self.gpgstat = {'status': status}
 
         # All status lines begin with gpg: but we'll let the regexs take care
         # of that for us.
