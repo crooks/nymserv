@@ -290,12 +290,12 @@ class Mailbox():
                 logmes = "ascertainable recipient for the Nymserver. This "
                 logmes = "probably shouldn't happen."
                 logging.warn(logmes)
-                raise EOFError, "No recipient found"
+                raise EOFError("No recipient found")
         logmes = "Unable to ascertain a recipient for this message. "
         logmes += "End of message was reached without finding a recipient "
         logmes += "or a blank line after the headers."
         logging.warn(logmes)
-        raise EOFError, "No recipient found"
+        raise EOFError("No recipient found")
 
 
 class UpdateUser():
@@ -1195,11 +1195,13 @@ def delete(email):
         gpg.delete_key(fp)
         sys.stdout.write("%s: Deleted\n" % fp)
 
+
 def expire():
     for k in gpg.emails_to_list():
         gpgparse.statparse(gpg.keyinfo(k))
         if 'expired' in gpgparse:
             delete(k)
+
 
 def cleanup():
     resfile = os.path.join(config.get('paths', 'etc'), 'reserved_nyms')
