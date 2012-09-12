@@ -205,6 +205,9 @@ class PoolPost:
             try:
                 peers[host].quit()
                 logging.debug('%s: Connection Closed' % host)
+            except nntplib.NNTPTemporaryError:
+                logging.info('%s: NNTP Quit returned a temporary error : '
+                             ': %s' % (host, sys.exc_info()[1]))
             except socket.error, e:
                 logmes = '%s: Cannot close connection. ' % host
                 logmes += 'Socket Error: %s' % e
