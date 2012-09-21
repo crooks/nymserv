@@ -167,16 +167,16 @@ class PoolPost:
                 continue
 
             o = cStringIO.StringIO()
-            logging.debug('Attempting to post %s.' % filename)
+            logging.debug('Posting file=%s, mid=%s' % (filename, mid))
             o.write(msg.as_string())
             # Now we offer the message to our peers and hope at least one
             # accepts.
             for host in peers:
                 o.seek(0)  # Start from the beginning of our file
                 try:
-                    peers[host].ihave(mid, o)
+                    resp = peers[host].ihave(mid, o)
                     success = True
-                    logging.debug('%s: Accepted %s' % (host, mid))
+                    logging.debug('%s: IHAVE returned: %s' % (host, resp))
                 except nntplib.NNTPTemporaryError:
                     message = '%s: IHAVE returned a temporary error: ' % host
                     message += '%s.' % sys.exc_info()[1]
@@ -442,13 +442,15 @@ class PostPrep():
                 enc_payload = gpg.symmetric(conf['symmetric'], enc_payload)
             self.pool_write(headers + '\n' + enc_payload)
         elif result:
-            logmes = "GnuPG returned an error whilst attempting to signcrypt "
-            logmes += "a message.  The error was:\n%s" % result
-            logging.error(logmes)
+            logging.error("GnuPG returned an error whilst attempting to "
+                          "signcrypt a message.  The error was:\n%s"
+                          % result)
+            logging.debug("recipient=%s, keyring=%s, keyid=%s"
+                          % (recipient, config.get('paths', 'keyring'),
+                             config.get('pgp', 'key')))
         else:
-            logmes = "GnuPG returned no payload or error during signcrypt. "
-            logmes += "The recipient was: %s" % recipient
-            logging.error(logmes)
+            logging.error("GnuPG returned no payload or error during "
+                          "signcrypt. The recipient was: %s" % recipient)
 
     def pool_write(self, payload):
         """Write the received message (complete with headers) to the pool.  The
