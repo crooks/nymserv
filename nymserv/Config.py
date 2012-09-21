@@ -127,6 +127,10 @@ config.set('thresholds', 'post_size_limit', 512 * 1024)
 config.set('thresholds', 'sleep_interval', 1 * 60 * 60)
 config.set('thresholds', 'socket_timeout', 10)
 
+# Miscellaneous options that don't fit other sections.
+config.add_section('misc')
+config.set('misc', 'recipient_source', 'X-Original-To')
+
 #with open('example.cfg', 'wb') as configfile:
 #    config.write(configfile)
 

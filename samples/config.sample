@@ -5,6 +5,13 @@
 # To use this file, rename it .nymservrc and place it in your homedir.
 # The settings shown are the defaults unless otherwise stated.
 
+[misc]
+# By default the server expects to find recipient information in an
+# X-Original-To header.  This is the header appended by Postfix but may not be
+# consistent for all MTAs.  This option allows the specification of an
+# alternate header. Note, it *is* case sensitive!
+#recipient_source = X-Original-To
+
 [paths]
 # The user folder is the most important element of the server (along with
 # the GnuPG keyring). The user folder contains the Public Keys and

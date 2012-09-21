@@ -216,6 +216,17 @@ class PoolPost:
 
 
 class Mailbox():
+    def __init__(self):
+        # By default the nymserver looks for X-Original-To headers but
+        # this can be overridden.
+        recipient_header = config.get('misc', 'recipient_source').rstrip()
+        if recipient_header.endswith(":"):
+            recipient_header = recipient_header[:-1]
+        logging.debug("Looking for valid recipients in the %s header."
+                      % recipient_header)
+        recipient_header += ": "
+        self.recipient_header = recipient_header
+
     def process(self):
         """Parse a Maildir and pass each identified message to the Nymserver
         for processing.  Failed messages will be stored in a held queue.
@@ -267,7 +278,7 @@ class Mailbox():
         doms = config.get('domains', 'hosted')
         msglines = message.split("\n")
         for line in msglines:
-            if not line.startswith("X-Original-To: "):
+            if not line.startswith(self.recipient_header):
                 continue
             # Strip the header from its content.
             recipient = line.split(": ", 1)[1]
