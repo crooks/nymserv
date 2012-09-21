@@ -1,9 +1,11 @@
 v0.1, 20-Feb-2012 -- Initial release.
 
-v0.2, --date--
+v0.2, 21-Sep-2012
 o Add log rotation functionality.  This prevents having to rotate the daemon
   and consequently, re-enter the passphrase.
 o Use getpass module instead of raw_input for passphrase prompt.
 o Don't prepend https url requests with http://.
 o Add an expire command to delete Nyms with expired keys.
 o Correct a dictionary naming error on Duplicate message.
+o Add a configuration option to specify which mail header to check for
+  recipients.
