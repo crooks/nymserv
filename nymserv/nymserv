@@ -805,7 +805,12 @@ def process_config(result, payload):
             return False
         # By now we know a single key was imported, but how many valid
         # uids are on it?
-        uids = getuidmails(gpgparse['uidmail'])
+        if 'uidmail' in gpgparse:
+            uids = getuidmails(gpgparse['uidmail'])
+        else:
+            logging.info("Reject: No valid email addresses on key. "
+                         "GnuPG states was:\n%s" % result)
+            return False
         if len(uids) == 1:
             sigfor = uids[0]
             logmes = "Test imported KeyID %(keyid)s for " % gpgparse
