@@ -113,9 +113,9 @@ class PoolPost:
             peers = self.connect_peers()
             # If there are no host connections, log it and give up.
             if len(peers) == 0:
-                logmes = 'All %s peer connections failed.' % len(self.hosts)
-                logmes += ' Check Internet connection, it might be dead.'
-                logging.warn(logmes)
+                logging.warn("All %s peer connections failed. Check Internet "
+                             "connection, it might be dead."
+                             % len(self.hosts))
             else:
                 self.post_files(peers, pool_files)
 
@@ -150,9 +150,8 @@ class PoolPost:
                 logging.debug('Inserting Date header: %s' % d)
                 msg['Date'] = d
                 if 'Injection-Date' in msg:
-                    logmes = 'Deleting Injection-Date header:'
-                    logmes += ' %s' % msg['Injection-Date']
-                    logging.debug(logmes)
+                    logging.debug("Deleting Injection-Date header: %s"
+                                  % msg['Injection-Date'])
                     del msg['Injection-Date']
                 logging.debug('Inserting Injection-Date header: %s' % d)
                 msg['Injection-Date'] = d
@@ -162,8 +161,8 @@ class PoolPost:
                 mid = msg['Message-ID']
                 logging.debug('%s: Contains Message-ID: %s' % (filename, mid))
             else:
-                logmes = '%s: Contains no Message-ID. Skipping.' % filename
-                logging.warn(logmes)
+                logging.warn("%s: Contains no Message-ID. Skipping."
+                             % filename)
                 continue
 
             o = cStringIO.StringIO()
@@ -178,17 +177,14 @@ class PoolPost:
                     success = True
                     logging.debug('%s: IHAVE returned: %s' % (host, resp))
                 except nntplib.NNTPTemporaryError:
-                    message = '%s: IHAVE returned a temporary error: ' % host
-                    message += '%s.' % sys.exc_info()[1]
-                    logging.debug(message)
+                    logging.debug("%s: IHAVE returned a temporary error: %s"
+                                  % (host, sys.exc_info()[1]))
                 except nntplib.NNTPPermanentError:
-                    message = '%s: IHAVE returned a permanent error: ' % host
-                    message += '%s.' % sys.exc_info()[1]
-                    logging.warn(message)
+                    logging.warn("%s: IHAVE returned a permanent error: %s"
+                                 % (host, sys.exc_info()[1]))
                 except:
-                    message = 'IHAVE returned an unknown error: '
-                    message += '%s.' % sys.exc_info()[1]
-                    logging.warn(message)
+                    logging.warn("%s: IHAVE returned an unknown error: %s"
+                                 % (host, sys.exc_info()[1]))
             # Close the file object
             o.close()
 
@@ -206,12 +202,11 @@ class PoolPost:
                 peers[host].quit()
                 logging.debug('%s: Connection Closed' % host)
             except nntplib.NNTPTemporaryError:
-                logging.info('%s: NNTP Quit returned a temporary error : '
-                             ': %s' % (host, sys.exc_info()[1]))
+                logging.info("%s: NNTP Quit returned a temporary error: %s"
+                             % (host, sys.exc_info()[1]))
             except socket.error, e:
-                logmes = '%s: Cannot close connection. ' % host
-                logmes += 'Socket Error: %s' % e
-                logging.warn(logmes)
+                logging.warn("%s: Cannot close connection. Socket Error: %s"
+                             % (host, e))
         # Processing completed normally.
 
 
