@@ -26,7 +26,7 @@ setup(
     name='nymserv',
     author='Steve Crook',
     author_email='steve@mixmin.net',
-    version='0.2',
+    version='0.3',
     packages=['nymserv', ],
     scripts=['nymserv/nymserv', ],
     license='GPLv3',

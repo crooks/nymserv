@@ -809,24 +809,21 @@ def process_config(result, payload):
             uids = getuidmails(gpgparse['uidmail'])
         else:
             logging.info("Reject: No valid email addresses on key. "
-                         "GnuPG states was:\n%s" % result)
+                         "GnuPG key details:\n%s" % result)
             return False
         if len(uids) == 1:
             sigfor = uids[0]
-            logmes = "Test imported KeyID %(keyid)s for " % gpgparse
-            logmes += "email address %s." % sigfor
-            logging.info(logmes)
+            logging.info("Test imported KeyID %(keyid)s for email address %s"
+                         % gpgparse)
         elif len(uids) > 1:
-            logmes = "More than one valid uid on %(keyid)s. " % gpgparse
-            logmes = "We can't allow that as each key must have a single "
-            logmes = "unique identifier."
-            logging.warn(logmes)
+            logging.info("More than one valid uid on %(keyid)s. We can't "
+                         "allow that as each key must have a single unique "
+                         "identifier." % gpgparse)
             return False
         else:
             # We didn't get any valid uids.
-            logging.warn("No valid uids on test imported key.")
-            #TODO The return on this should be True but for now, False will
-            #     cause the message to be held for human validation.
+            logging.info("The imported key contains valid email addresses "
+                         "but none of them are for domains we support.")
             return False
 
         # At this stage, we have imported a valid key on to a fake keyring and

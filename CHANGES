@@ -9,3 +9,6 @@ o Add an expire command to delete Nyms with expired keys.
 o Correct a dictionary naming error on Duplicate message.
 o Add a configuration option to specify which mail header to check for
   recipients.
+
+v0.3, Not yet released
+o Trap new nym requests that have no email addresses on the key.
