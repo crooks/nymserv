@@ -816,8 +816,8 @@ def process_config(result, payload):
             return False
         if len(uids) == 1:
             sigfor = uids[0]
-            logging.info("Test imported KeyID %(keyid)s for email address %s"
-                         % (gpgparse, sigfor))
+            logging.info("Test imported KeyID %s for email address %s",
+                         gpgparse['keyid'], sigfor)
         elif len(uids) > 1:
             logging.info("More than one valid uid on %(keyid)s. We can't "
                          "allow that as each key must have a single unique "
