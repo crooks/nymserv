@@ -44,6 +44,14 @@ from nymserv.Config import options
 from nymserv.Config import config
 
 
+class NymservError(Exception):
+    """Base class for all Nymserver errors."""
+    pass
+
+class PublicKeyError(NymservError):
+    """Raised when a key is malformed or incompatible with the Nymserver."""
+    pass
+
 class MyDaemon(Daemon):
     def run(self):
         sleepfor = config.getint('thresholds', 'sleep_interval')
@@ -809,7 +817,7 @@ def process_config(result, payload):
         if len(uids) == 1:
             sigfor = uids[0]
             logging.info("Test imported KeyID %(keyid)s for email address %s"
-                         % gpgparse)
+                         % (gpgparse, sigfor))
         elif len(uids) > 1:
             logging.info("More than one valid uid on %(keyid)s. We can't "
                          "allow that as each key must have a single unique "
