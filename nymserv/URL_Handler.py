@@ -128,6 +128,7 @@ class URL():
 
             # If we get here then we must have a Content-Type
             if '/' in ct:
+                logging.debug("Content-Type defined as: %s", ct)
                 type, slashright = ct.split('/')
                 # The Content-Type can include the Charset.  This is always
                 # delimited with a semi-colon.
@@ -182,6 +183,14 @@ class URL():
         info = f.info()
         if 'Content-Type' in info:
             ct = info['Content-Type']
+            # Malformed URLs can return multiple Content-Type headers.
+            # Python's urllib2 decides to return them joined together by
+            # a comma.  We assume here that the first one is correct.
+            if ',' in ct:
+                logging.warn("Malformed header Content-Type: %s. Probably "
+                             "duplicated in returned urlinfo. Splitting at "
+                             "first comma.", ct)
+                ct = ct.split(',')[0]
         else:
             ct = None
         return f.read(), ct
