@@ -48,9 +48,11 @@ class NymservError(Exception):
     """Base class for all Nymserver errors."""
     pass
 
+
 class PublicKeyError(NymservError):
     """Raised when a key is malformed or incompatible with the Nymserver."""
     pass
+
 
 class MyDaemon(Daemon):
     def run(self):
@@ -284,7 +286,7 @@ class Mailbox():
             if not line.startswith(self.recipient_header):
                 continue
             # Strip the header from its content.
-            recipient = line.split(": ", 1)[1]
+            recipient = line.split(": ", 1)[1].lower()
             # Hopefully the content is an email address.
             if not '@' in recipient:
                 logging.info("Invalid recipient found: %s" % recipient)
@@ -300,16 +302,14 @@ class Mailbox():
             # When we encounter an empty line, it's the end of the header
             # section.
             if not line:
-                logmes = "End or header section reached without finding an "
-                logmes = "ascertainable recipient for the Nymserver. This "
-                logmes = "probably shouldn't happen."
-                logging.warn(logmes)
-                raise EOFError("No recipient found")
-        logmes = "Unable to ascertain a recipient for this message. "
-        logmes += "End of message was reached without finding a recipient "
-        logmes += "or a blank line after the headers."
-        logging.warn(logmes)
-        raise EOFError("No recipient found")
+                logging.warn("End of header section reached without finding "
+                             "an ascertainable recipient for the Nymserver. "
+                             "This probably shouldn't happen.")
+                raise EOFError("No valid recipient in headers")
+        logging.warn("Unable to ascertain a recipient for this message. "
+                     "End of message was reached without finding a recipient "
+                     "or a blank line after the headers.")
+        raise EOFError("No valid recipient in message")
 
 
 class UpdateUser():
