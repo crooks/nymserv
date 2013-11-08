@@ -786,7 +786,11 @@ def process_config(result, payload):
         # By setting dryrun=True, the key isn't imported to our
         # real keyring. That will happen later if it passes scrutiny.
         result = gpg.import_key(payload, dryrun=True)
-        gpgparse.statparse(result)
+        try:
+            gpgparse.statparse(result)
+        except GnupgError:
+            logging.error("GnuPG encountered an error")
+            return False
         # Here we check how many keys were imported. Only one is
         # considered valid.
         if 'imported' not in gpgparse:

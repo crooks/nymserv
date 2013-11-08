@@ -29,6 +29,10 @@ class Error(Exception):
     pass
 
 
+class GnupgError(Error):
+    pass
+
+
 class DecryptError(Error):
     """GnuPG Decrypt Errors"""
     def __init__(self, expr):
