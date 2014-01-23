@@ -27,6 +27,7 @@ from httplib import InvalidURL
 import logging
 import email.utils
 import strutils
+import sys
 from Config import config
 
 
@@ -110,6 +111,10 @@ class URL():
                     ct = 'text/plain'
             except InvalidURL, e:
                 message = "Invalid URL: %s. Reason: %s" % (url, e)
+                ct = 'text/plain'
+            except:
+                message = ("Unexpected error duing retreival of URL"
+                           "URL: %s\nError: %s" % (url, sys.exc_info()[0]))
                 ct = 'text/plain'
             if len(message) > self.maxsize:
                 msglen = len(message)
