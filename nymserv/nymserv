@@ -443,11 +443,16 @@ class PostPrep():
             logging.debug('No Symmetric encryption defined, throwing KeyID')
             throwkid = True
         logging.debug('Signing and Encrypting message for ' + recipient)
-        result, enc_payload = gpg.signcrypt(recipient,
-                                    config.get('pgp', 'key'),
-                                    config.get('pgp', 'passphrase'),
-                                    payload,
-                                    throwkid)
+        try:
+            result, enc_payload = gpg.signcrypt(recipient,
+                                        config.get('pgp', 'key'),
+                                        config.get('pgp', 'passphrase'),
+                                        payload,
+                                        throwkid)
+        except IOError, e:
+            logging.warn("Error during pre-post encryption: %s", e)
+            result = e
+            enc_payload = None
         if enc_payload:
             # Symmetrically wrap the payload if we have a Symmetric password
             # defined.
