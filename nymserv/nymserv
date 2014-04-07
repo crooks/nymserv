@@ -993,7 +993,12 @@ def process_config(result, payload):
 def process_send(result, payload):
     logging.debug('Message received for forwarding.')
     # We send messages for Nymholders after verifying their signature.
-    gpgparse.statparse(result)
+    try:
+        gpgparse.statparse(result)
+    except nymserv.gnupg.GnupgError, e:
+        logging.error("Gnupg returned error: %s", e)
+        return False
+
     if 'goodsig' not in gpgparse or not gpgparse['goodsig']:
         logging.info("Only verified signatures can send messages.")
         return True
