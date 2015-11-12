@@ -99,7 +99,7 @@ class PoolPost:
             logging.debug('Connecting to %s' % host)
             try:
                 peers[host] = nntplib.NNTP(host)
-                #peers[host].set_debuglevel(2)
+                # peers[host].set_debuglevel(2)
                 logging.debug('%s: Connection established' % host)
             except socket.gaierror, e:
                 logging.warn('%s: Connection error: %s' % (host, e))
@@ -135,7 +135,7 @@ class PoolPost:
         """
         # Iterate through all the files in the pool
         for filename in pool_files:
-             # Bool set to true if any newsserver accepts the post
+            # Bool set to true if any newsserver accepts the post
             success = False
             # Create a fully-qualified filename to avoid any confusion
             fqname = os.path.join(self.poolpath, filename)
@@ -288,7 +288,7 @@ class Mailbox():
             # Strip the header from its content.
             recipient = line.split(": ", 1)[1].lower()
             # Hopefully the content is an email address.
-            if not '@' in recipient:
+            if '@' not in recipient:
                 logging.info("Invalid recipient found: %s" % recipient)
                 continue
             # Split the email address and validate the domain.
@@ -349,8 +349,8 @@ class UpdateUser():
                 logging.info(logmes)
                 continue
             # If we match a field:value pair, is it valid?
-            if not field in self.valid_fields:
-                if not field in self.ignore_fields:
+            if field not in self.valid_fields:
+                if field not in self.ignore_fields:
                     logmes = "%s: Invalid field in modify " % field
                     logmes += "request"
                     logging.info(logmes)
@@ -404,8 +404,8 @@ class PostPrep():
         message += "Message-ID: " + mid + "\n"
         message += "Newsgroups: %s\n" % config.get('nntp', 'newsgroups')
         message += "Injection-Info: %s; " % config.get('nntp', 'injectinfo')
-        message += "mail-complaints-to=\"%s\"\n" % \
-                                            config.get('nntp', 'contact')
+        message += ("mail-complaints-to=\"%s\"\n"
+                    % config.get('nntp', 'contact'))
         message += "Injection-Date: " + email.utils.formatdate() + "\n"
         return mid, message
 
@@ -429,7 +429,7 @@ class PostPrep():
 
         """
         mid, headers = self.news_headers(conf)
-        if not 'fingerprint' in conf:
+        if 'fingerprint' not in conf:
             conf.close()
             logging.error('User shelve contains no fingerprint key.')
             return False
@@ -444,11 +444,12 @@ class PostPrep():
             throwkid = True
         logging.debug('Signing and Encrypting message for ' + recipient)
         try:
-            result, enc_payload = gpg.signcrypt(recipient,
-                                        config.get('pgp', 'key'),
-                                        config.get('pgp', 'passphrase'),
-                                        payload,
-                                        throwkid)
+            result, enc_payload = gpg.signcrypt(
+                recipient,
+                config.get('pgp', 'key'),
+                config.get('pgp', 'passphrase'),
+                payload,
+                throwkid)
         except IOError, e:
             logging.warn("Error during pre-post encryption: %s", e)
             result = e
@@ -491,15 +492,17 @@ class PostPrep():
 def init_logging():
     logfmt = config.get('logging', 'format')
     datefmt = config.get('logging', 'datefmt')
-    loglevels = {'debug': logging.DEBUG, 'info': logging.INFO,
-                'warn': logging.WARN, 'error': logging.ERROR}
+    loglevels = {'debug': logging.DEBUG,
+                 'info': logging.INFO,
+                 'warn': logging.WARN,
+                 'error': logging.ERROR}
     logging.getLogger().setLevel(logging.DEBUG)
     logfile = logging.handlers.TimedRotatingFileHandler(
-                    os.path.join(config.get('paths', 'log'), 'nymserv.log'),
-                    when='midnight',
-                    interval=1,
-                    backupCount=config.getint('logging', 'retain'),
-                    utc=True)
+        os.path.join(config.get('paths', 'log'), 'nymserv.log'),
+        when='midnight',
+        interval=1,
+        backupCount=config.getint('logging', 'retain'),
+        utc=True)
     logfile.setLevel(loglevels[config.get('logging', 'level')])
     logfile.setFormatter(logging.Formatter(logfmt, datefmt=datefmt))
     logging.getLogger().addHandler(logfile)
@@ -684,7 +687,7 @@ def msgparse(recipient, message):
         # It might be encrypted but we don't care as we're just passing on the
         # payload to the Nym.
         nymlist = gpg.emails_to_list()
-        if not recipient in nymlist:
+        if recipient not in nymlist:
             logging.info('Unknown recipient %s.' % recipient)
             return True
         userfile = os.path.join(config.get('paths', 'users'),
@@ -976,7 +979,7 @@ def process_config(result, payload):
     elif not modified and not created:
         logging.info("%s: Nothing modified. Sending status." % sigfor)
     # Everyone should have their address in the user configuration
-    if not 'address' in userconf:
+    if 'address' not in userconf:
         logging.debug("Adding address to userconf.")
         userconf['address'] = sigfor
     if created:
@@ -1078,9 +1081,9 @@ def process_send(result, payload):
     # Reject sending if block_sends is defined and true
     if 'block_sends' in userconf and userconf['block_sends']:
         logging.info(nym_email + ': Sending email is blocked')
-        #TODO Change this return to True after (if ever) it's proven.
+        # TODO Change this return to True after (if ever) it's proven.
         return False
-    if not 'Subject' in send_msg:
+    if 'Subject' not in send_msg:
         logging.debug('No Subject on message, creating a dummy.')
         send_msg['Subject'] = 'No Subject'
     # Check we actually have a recipient for the message
@@ -1120,7 +1123,7 @@ def process_send(result, payload):
         userconf['sent'] = 1
     # Get today's date as a string
     today = nymserv.strutils.datestr()
-    if not 'last_sent' in userconf:
+    if 'last_sent' not in userconf:
         # We've never sent a message, we have now!
         userconf['last_sent'] = today
     elif userconf['last_sent'] != today:
@@ -1247,7 +1250,7 @@ def cleanup():
         keyfile = os.path.join(config.get('paths', 'users'), nym + '.key')
         if os.path.exists(userfile):
             userconf = shelve.open(userfile)
-            if not 'address' in userconf:
+            if 'address' not in userconf:
                 userconf['address'] = nym
             if not os.path.isfile(keyfile):
                 f = open(keyfile, 'w')
@@ -1269,7 +1272,7 @@ def main():
         expire()
     elif options.recipient:
         sys.stdout.write("Type message here.  Finish with Ctrl-D.\n")
-        logging.info("Processing message for hardcoded recipient %s" % \
+        logging.info("Processing message for hardcoded recipient %s",
                      options.recipient)
         msgparse(options.recipient, sys.stdin.read())
     elif options.process:
@@ -1292,10 +1295,10 @@ if (__name__ == "__main__"):
     init_logging()
     # Initialize the Daemon
     daemon = MyDaemon(
-            os.path.join(config.get('paths', 'pid'), 'nymserv.pid'),
-            '/dev/null',
-            '/dev/null',
-            os.path.join(config.get('paths', 'log'), 'nymserv.err'))
+        os.path.join(config.get('paths', 'pid'), 'nymserv.pid'),
+        '/dev/null',
+        '/dev/null',
+        os.path.join(config.get('paths', 'log'), 'nymserv.err'))
     updusr = UpdateUser()
     pool = PoolPost(config.get('paths', 'etc'),
                     config.get('paths', 'pool'))
