@@ -5,7 +5,7 @@
 # nymserv.py - A Basic Nymserver for delivering messages to a shared mailbox
 # such as alt.anonymous.messages.
 #
-# Copyright (C) 2011 Steve Crook <steve@mixmin.net>
+# Copyright (C) 2016 Steve Crook <steve@mixmin.net>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
@@ -315,10 +315,12 @@ class Mailbox():
 class UpdateUser():
     def __init__(self):
         # Valid fields are those that are deemed user-definable.
-        self.valid_fields = ['symmetric', 'hsub', 'delete', 'subject']
+        self.valid_fields = ['symmetric', 'hsub', 'delete', 'subject',
+                             'acksend']
         self.alternatives = {'hash-subject':        'hsub',
                              'subject-password':    'hsub',
-                             'hash-key':            'hsub'}
+                             'hash-key':            'hsub',
+                             'acknowledge-send':    'acksend'}
         ignore_fields = ['version']  # Public keys contain "Version: "
         # We ignore the next two fields to prevent warnings about MIME content.
         ignore_fields.append("content-type")
@@ -356,8 +358,11 @@ class UpdateUser():
                     logging.info(logmes)
                 continue
             # None or False means set the field to False.
-            if value.lower() == 'none' or value.lower() == 'false':
+            vlc = value.lower()
+            if vlc == '0' or vlc == 'no' or vlc == 'none' or vlc == 'false':
                 moddict[field] = False
+            elif vls == '1' or vlc == 'yes' or vlc == 'true':
+                moddict[field] = True
             else:
                 moddict[field] = value
         return moddict
@@ -1114,9 +1119,16 @@ def process_send(result, payload):
         recipients += ',' + send_msg['Cc']
     # email message
     email_message(sigfor, recipients, send_msg)
-    suc_message = send_success_message(send_msg)
-    logging.info('Posting Send confirmation to ' + sigfor)
-    postprep.post_message(suc_message, userconf)
+    # This is a little kludge as acksend is a recently added option.  To
+    # maintain default behaviour, if it's not defined, it's set to True
+    # so acknowledgements will be sent.
+    if 'acksend' not in userconf:
+        logging.info("Adding acksend option to userconf for %s", sigfor)
+        userconf['acksend'] = True
+    if 'acksend' in userconf and userconf['acksend']:
+        suc_message = send_success_message(send_msg)
+        logging.info('Posting Send confirmation to ' + sigfor)
+        postprep.post_message(suc_message, userconf)
     if 'sent' in userconf:
         userconf['sent'] += 1
     else:

@@ -10,8 +10,11 @@ o Correct a dictionary naming error on Duplicate message.
 o Add a configuration option to specify which mail header to check for
   recipients.
 
-v0.3, Not yet released
+v0.3, 20-Feb-2014
 o Trap new nym requests that have no email addresses on the key.
 o Check for malformed Content-Type returned during geturl().
 o Convert uppercase chars in the recipient address before validation.
 o Trap unexpected responses from Webservers during URL retrieval.
+
+v0.4, 11-Jan-2016
+o Add a userconf option to disable send acknowledgements.
