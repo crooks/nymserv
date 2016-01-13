@@ -361,7 +361,7 @@ class UpdateUser():
             vlc = value.lower()
             if vlc == '0' or vlc == 'no' or vlc == 'none' or vlc == 'false':
                 moddict[field] = False
-            elif vls == '1' or vlc == 'yes' or vlc == 'true':
+            elif vlc == '1' or vlc == 'yes' or vlc == 'true':
                 moddict[field] = True
             else:
                 moddict[field] = value
