@@ -359,9 +359,9 @@ class UpdateUser():
                 continue
             # None or False means set the field to False.
             vlc = value.lower()
-            if vlc == '0' or vlc == 'no' or vlc == 'none' or vlc == 'false':
+            if vlc in '0 no none false'.split():
                 moddict[field] = False
-            elif vlc == '1' or vlc == 'yes' or vlc == 'true':
+            elif vlc in '1 yes true'.split():
                 moddict[field] = True
             else:
                 moddict[field] = value
