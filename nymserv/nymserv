@@ -957,7 +957,7 @@ def process_config(result, payload):
     # in the master userconf dict.
     moddict = updusr.make_moddict(payload)
     # Does the mod request include a Delete statement?
-    if 'delete' in moddict and moddict['delete'].lower() == 'yes':
+    if 'delete' in moddict and moddict['delete'] is True:
         logmessage = sigfor + ": Starting delete process "
         logmessage += "at user request."
         logging.info(logmessage)
