@@ -78,6 +78,7 @@ class GnuPGFunctions():
         temp = tempfile.TemporaryFile()
         self.reset_options()
         self.gnupg.options.extra_args = ['--with-fingerprint']
+        self.gnupg.options.extra_args.append('--pinentry-mode=loopback')
         self.gnupg.passphrase = passphrase
         proc = self.gnupg.run(['--decrypt'], create_fhs=['stdin', 'logger'],
                                              attach_fhs={'stdout': temp})
@@ -260,6 +261,7 @@ class GnuPGFunctions():
         self.gnupg.options.recipients = recipients
         self.gnupg.options.default_key = senderkey
         self.gnupg.options.extra_args = []
+        self.gnupg.options.extra_args.append('--pinentry-mode=loopback')
         if throw_key:
             self.gnupg.options.extra_args.append('--no-version')
             self.gnupg.options.extra_args.append('--throw-keyid')
