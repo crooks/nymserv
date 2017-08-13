@@ -261,6 +261,7 @@ class GnuPGFunctions():
         self.gnupg.options.recipients = recipients
         self.gnupg.options.default_key = senderkey
         self.gnupg.options.extra_args = []
+        self.gnupg.options.extra_args.append('--always-trust')
         self.gnupg.options.extra_args.append('--pinentry-mode=loopback')
         if throw_key:
             self.gnupg.options.extra_args.append('--no-version')

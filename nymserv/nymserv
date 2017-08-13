@@ -954,7 +954,7 @@ def process_config(result, payload):
         else:
             # In theory this can't happen.  We can't be modifying a Nym that
             # doesn't already have a config file.
-            logging.error("%s: File doesn't exist." % userconf)
+            logging.error("%s: File doesn't exist." % userfile)
             return False
     # user_update creates a new dict of keys that need to be created or changed
     # in the master userconf dict.
