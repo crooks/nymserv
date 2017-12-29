@@ -737,7 +737,10 @@ def msgparse(recipient, message):
 
 
 def process_config(result, payload):
-    gpgparse.statparse(result)
+    try:
+        gpgparse.statparse(result)
+    except:
+        return False
     if 'goodsig' in gpgparse and gpgparse['goodsig']:
         # At this point, we cannot be dealing with a create message. We
         # know the key in order to have verified the signature.
