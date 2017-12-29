@@ -59,10 +59,10 @@ class GnuPGFunctions():
             homedir = os.path.expanduser('~')
             keyring = os.path.join(homedir, '.gnupg')
         if not os.path.isdir(keyring):
-            raise IOError, "Keyring directory not found."
+            raise IOError("PGP Keyring directory not found")
         self.keyring = keyring
-        self.email_re = \
-          re.compile('([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
+        self.email_re = re.compile(
+                '([\w\-][\w\-\.]*)@[\w\-][\w\-\.]+[a-zA-Z]{1,4}')
 
     def reset_options(self):
         self.gnupg.options = GnuPGInterface.Options()
@@ -80,8 +80,9 @@ class GnuPGFunctions():
         self.gnupg.options.extra_args = ['--with-fingerprint']
         self.gnupg.options.extra_args.append('--pinentry-mode=loopback')
         self.gnupg.passphrase = passphrase
-        proc = self.gnupg.run(['--decrypt'], create_fhs=['stdin', 'logger'],
-                                             attach_fhs={'stdout': temp})
+        proc = self.gnupg.run(['--decrypt'],
+                              create_fhs=['stdin', 'logger'],
+                              attach_fhs={'stdout': temp})
         proc.handles['stdin'].write(message)
         proc.handles['stdin'].close()
         result = proc.handles['logger'].read()
@@ -100,8 +101,9 @@ class GnuPGFunctions():
     def export(self, keyid):
         self.reset_options()
         idlist = [keyid]
-        proc = self.gnupg.run(['--export'], args=idlist, create_fhs=['stdout',
-                                                                    'logger'])
+        proc = self.gnupg.run(['--export'],
+                              args=idlist,
+                              create_fhs=['stdout', 'logger'])
         result = proc.handles['logger'].read()
         key = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
@@ -116,9 +118,9 @@ class GnuPGFunctions():
         self.reset_options()
         self.gnupg.options.extra_args = ['--with-fingerprint']
         idlist = [keyid]
-        proc = self.gnupg.run(['--list-keys'], args=idlist,
-                                               create_fhs=['stdout',
-                                                           'logger'])
+        proc = self.gnupg.run(['--list-keys'],
+                              args=idlist,
+                              create_fhs=['stdout', 'logger'])
         result = proc.handles['stdout'].read()
         proc.handles['stdout'].close()
         proc.handles['logger'].close()
@@ -129,25 +131,43 @@ class GnuPGFunctions():
         If more than one fingerprint is return from the supplied criteria,
         None is returned.  This prevents potential ambiguity."""
         self.reset_options()
+        # Comparing keyids is easier if they're all the same case.
+        keyid = keyid.upper()
         idlist = [keyid]
-        proc = self.gnupg.run(['--fingerprint'], args=idlist,
-                                                 create_fhs=['stdout',
-                                                             'logger'])
+        proc = self.gnupg.run(['--with-colons', '--fingerprint'],
+                              args=idlist,
+                              create_fhs=['stdout', 'logger'])
         result = proc.handles['stdout'].read()
+        err = proc.handles['logger'].read()
         proc.handles['stdout'].close()
         proc.handles['logger'].close()
         lines = result.split("\n")
-        fps = []
-        lastline = ""
+        if len(err) > 0:
+            raise PGPKeyError(err)
+        pub = None  # Public Key
+        fpr = None  # Fingerprint
+        # Parsing pub and fpr in the same loop is feasible because pub will
+        # always preceed fpr in gpg output.
         for line in lines:
-            if "Key fingerprint" in line and lastline.startswith("pub"):
-                foo, fp = line.split(" = ")
-                fpc = fp.replace(" ", "")
-                fps.append(fpc)
-            lastline = line
-        if len(fps) == 1:
-            return fps[0]
-        return None
+            if line.startswith('pub'):
+                pub = line.split(":")[4]
+                if not pub.endswith(keyid):
+                    pub = None
+            if pub is not None and line.startswith('fpr'):
+                fpr = line.split(":")[9]
+                if fpr.endswith(pub):
+                    # The fpr matches the pub so break out and return the fpr.
+                    break
+                else:
+                    # fpr doesn't match the pub, keep iterating.
+                    fpr = None
+        if pub is None:
+            raise PGPKeyError(
+                    "No Public Key found matching KeyID: {}".format(keyid))
+        if fpr is None:
+            raise PGPKeyError(
+                    "No fingerprint found matching PubKey: {}".format(pub))
+        return fpr
 
     def emails_to_list(self):
         """This is a kludge, but a useful one.  It returns a list of all the
@@ -170,9 +190,7 @@ class GnuPGFunctions():
         return uidmail
 
     def listkeys(self):
-        """Return a list of all the keys on the keyring.
-        
-        """
+        """Return a list of all the keys on the keyring."""
         self.reset_options()
         proc = self.gnupg.run(['--list-keys'], create_fhs=['stdout'])
         result = proc.handles['stdout'].read()
@@ -191,7 +209,7 @@ class GnuPGFunctions():
     def delete_key(self, keyid):
         """Delete a public key. Note: This doesn't return a status. It either
         succeeds or it errors.  Simples!"""
-        #TODO Not tested this yet.
+        # TODO Not tested this yet.
         self.reset_options()
         idlist = [keyid]
         proc = self.gnupg.run(['--delete-key'], args=idlist)
@@ -212,8 +230,9 @@ class GnuPGFunctions():
             self.gnupg.options.extra_args.append('--no-default-keyring')
             self.gnupg.options.extra_args.append('--keyring')
             self.gnupg.options.extra_args.append('tmpring.gpg')
-        proc = self.gnupg.run(['--import'], args=filelist,
-                                            create_fhs=['logger', 'stdout'])
+        proc = self.gnupg.run(['--import'],
+                              args=filelist,
+                              create_fhs=['logger', 'stdout'])
         result = proc.handles['logger'].read()
         proc.handles['logger'].close()
         proc.handles['stdout'].close()
@@ -242,9 +261,9 @@ class GnuPGFunctions():
         self.gnupg.passphrase = passphrase
         self.reset_options()
         self.gnupg.options.extra_args = ['--cipher-algo', 'AES256']
-        #self.gnupg.options.extra_args.append('--no-version')
-        proc = self.gnupg.run(['--symmetric'], create_fhs=['stdin'],
-                                         attach_fhs={'stdout': temp})
+        proc = self.gnupg.run(['--symmetric'],
+                              create_fhs=['stdin'],
+                              attach_fhs={'stdout': temp})
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
         proc.wait()
@@ -268,8 +287,8 @@ class GnuPGFunctions():
             self.gnupg.options.extra_args.append('--throw-keyid')
         self.gnupg.passphrase = passphrase
         proc = self.gnupg.run(['--encrypt', '--sign'],
-                                               create_fhs=['stdin', 'logger'],
-                                               attach_fhs={'stdout': temp})
+                              create_fhs=['stdin', 'logger'],
+                              attach_fhs={'stdout': temp})
         proc.handles['stdin'].write(payload)
         proc.handles['stdin'].close()
         result = proc.handles['logger'].read()
@@ -384,7 +403,7 @@ class GnuPGStatParse():
         # gpg: key 1E49F7D8: public key "oo7 <oo7@mixnym.net>" imported
         imp = "gpg: key ([0-9A-F]+): public key \"(.*)\" imported"
         import_re = re.compile(imp)
-        #gpg: key 50343676: "Flump (Flump Nym) <flump@mixnym.net>" not changed
+        # gpg: key 50343676: "Flump (Flump Nym) <flump@mixnym.net>" not changed
         imp = "gpg: key ([0-9A-F]+): \"(.*)\" not changed"
         import_nc_re = re.compile(imp)
 
@@ -622,6 +641,7 @@ def main():
         gp.statparse(g.keyinfo(k))
         if 'expired' in gp:
             print "%(keyid)s" % gp
+
 
 # Call main function.
 if (__name__ == "__main__"):

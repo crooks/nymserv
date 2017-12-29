@@ -870,11 +870,10 @@ def process_config(result, payload):
             logmes = "Fingerprint not obtained during import. Requesting "
             logmes += "it now."
             logging.debug(logmes)
-            fingerprint = gpg.fingerprint(gpgparse['keyid'])
-            if fingerprint is None:
-                logmes = "Failed to obtain fingerprint for "
-                logmes += "%(keyid)s" % gpgparse
-                logging.error(logmes)
+            try:
+                fingerprint = gpg.fingerprint(gpgparse['keyid'])
+            except nymserv.gnupg.PGPKeyError, e:
+                logging.error(e)
                 return False
         logging.debug("Imported fingerprint is %s." % fingerprint)
 
